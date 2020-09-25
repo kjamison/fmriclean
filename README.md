@@ -1,2 +1,4 @@
 # fmriclean
-fMRI denoising and parcellation
+fMRI outlier detection, and parcellation, and denoising
+
+To be be run AFTER preprocessing
