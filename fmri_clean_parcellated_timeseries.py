@@ -12,7 +12,7 @@ import re
 #enable/disable:
 #filtering (already set)
 #gsr (single flag right now)
-#compcorr
+#compcor
 parser=argparse.ArgumentParser(description='fMRI Denoising after parcellation')
 
 parser.add_argument('--input',action='store',dest='inputvol')
@@ -29,7 +29,7 @@ parser.add_argument('--filterstrategy',action='store',dest='filterstrategy',choi
 parser.add_argument('--connmeasure',action='append',dest='connmeasure',choices=['none','correlation','partialcorrelation','precision','covariance'],nargs='*')
 parser.add_argument('--outputformat',action='store',dest='outputformat',choices=['mat','txt'],default='txt')
 parser.add_argument('--gsr',action='store_true',dest='gsr')
-parser.add_argument('--nocompcorr',action='store_true',dest='nocompcorr')
+parser.add_argument('--nocompcor',action='store_true',dest='nocompcor')
 parser.add_argument('--nomotion',action='store_true',dest='nomotion')
 parser.add_argument('--motionparam',action='store',dest='mpfile')
 parser.add_argument('--motionparamtype',action='store',dest='mptype',choices=['spm','hcp','fsl'],default='fsl')
@@ -50,7 +50,7 @@ outputformat=args.outputformat
 confoundfile=args.confoundfile
 verbose=args.verbose
 do_gsr=args.gsr
-do_nocompcorr=args.nocompcorr
+do_nocompcor=args.nocompcor
 do_nomotion=args.nomotion
 tr=args.tr
 roilist=args.roilist
@@ -65,6 +65,8 @@ connmeasure=flatlist([x.split(",") for x in flatlist(connmeasure)])
 connmeasure=["partial correlation" if x=="partialcorrelation" else x for x in connmeasure]
 connmeasure=["partial correlation" if x=="partial" else x for x in connmeasure]
 connmeasure=list(set(connmeasure))
+connmeasure.sort() #note: list(set(...)) scrambles the order
+
 if 'none' in connmeasure:
     connmeasure=['none']
     
@@ -89,6 +91,8 @@ if bpf[0]<=0 and not np.isfinite(bpf[1]):
     bpfmode='none'
 
 print("Input time series: %s" % (inputvol))
+print("Input file pattern: %s" % (inputpattern))
+print("ROI list: %s" % (roilist))
 print("Confound file: %s" % (confoundfile))
 print("Motion parameter file (%s-style): %s" % (movfile_type,movfile))
 print("Outlier timepoint file: %s" % (outlierfile))
@@ -96,8 +100,9 @@ print("Ignore first N volumes: %s" % (skipvols))
 print("Filter strategy: %s" % (bpfmode))
 print("Filter band-pass Hz: [%s,%s]" % (bpf[0],bpf[1]))
 print("Output basename: %s" % (outbase))
-print("Skip CompCorr (WM+CSF): %s" % (do_nocompcorr))
+print("Skip compcor (WM+CSF): %s" % (do_nocompcor))
 print("Skip motion regressors: %s" % (do_nomotion))
+print("Global signal regression: %s" % (do_gsr))
 print("Save denoised time series: %s" % (do_savets))
 print("Connectivity measures: ", connmeasure)
 
@@ -193,6 +198,8 @@ else:
         roiname=""
     roiname_list=[roiname]
     
+did_print_nuisance_size=False
+
 for roiname,inputvol in zip(roiname_list,inputvol_list):
     Dt,roivals,roisizes,tr_input = loadinput(inputvol)
     if tr_input:
@@ -306,7 +313,7 @@ for roiname,inputvol in zip(roiname_list,inputvol_list):
     if not do_gsr:
         gmreg=np.zeros((numvols,0))
     
-    if do_nocompcorr:
+    if do_nocompcor:
         wmreg=np.zeros((numvols,0))
         csfreg=np.zeros((numvols,0))
         
@@ -314,6 +321,10 @@ for roiname,inputvol in zip(roiname_list,inputvol_list):
         mp=np.zeros((numvols,0))
         
     confounds=np.hstack([onesmat,addderiv(gmreg),wmreg,csfreg,addsquare(addderiv(mp)),addderiv(resteffect),outliermat,detrendmat])
+    
+    if not did_print_nuisance_size:
+        print("Total nuisance regressors: %d" %  (confounds.shape[1]))
+        did_print_nuisance_size=True
     
     if bpfmode=="orth":
         Dt_clean=nilearn.signal.clean(Dt, confounds=confounds, standardize='zscore', t_r=tr, detrend=False,low_pass=bpf[1], high_pass=bpf[0])
@@ -342,10 +353,10 @@ for roiname,inputvol in zip(roiname_list,inputvol_list):
     
     if do_savets:
         if outputformat == "mat":
-            savemat(outbase+roisuffix+gsrsuffix+"_tsclean.mat",{"ts":Dt_clean,"roi_labels":roivals,"roi_sizes":roisizes,"repetition_time":tr},format='5',do_compression=True)
+            savemat(outbase+roisuffix+gsrsuffix+"_tsclean.mat",{"ts":Dt_clean,"roi_labels":roivals, "roi_sizes":roisizes,"repetition_time":tr},format='5',do_compression=True)
         else:
             np.savetxt(outbase+roisuffix+gsrsuffix+"_tsclean.txt",Dt_clean,fmt="%.18f",header=roiheadertxt,comments="# ")
-        print("Saved %s%s%s_tsclean.%s" % (outbase,roisuffix,gsrsuffix,outputformat))
+        print("Saved %s%s%s_tsclean.%s (%dx%d)" % (outbase,roisuffix,gsrsuffix,outputformat,Dt_clean.shape[0],Dt_clean.shape[1]))
     
     for cm in connmeasure:
         if cm == 'none':
@@ -357,4 +368,4 @@ for roiname,inputvol in zip(roiname_list,inputvol_list):
         else:
             np.savetxt(outbase+roisuffix+gsrsuffix+"_FC%s.txt" % (connmeasure_shortname[cm]),C,fmt="%.18f",header=roiheadertxt,comments="# ")
             
-        print("Saved %s%s%s_FC%s.%s" % (outbase,roisuffix,gsrsuffix,connmeasure_shortname[cm],outputformat))
+        print("Saved %s%s%s_FC%s.%s (%dx%d)" % (outbase,roisuffix,gsrsuffix,connmeasure_shortname[cm],outputformat,C.shape[0],C.shape[1]))
