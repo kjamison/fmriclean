@@ -19,7 +19,7 @@ parser.add_argument('--input',action='store',dest='inputvol')
 parser.add_argument('--confoundfile',action='store',dest='confoundfile')
 parser.add_argument('--outbase',action='store',dest='outbase')
 parser.add_argument('--inputpattern',action='store',dest='inputpattern')
-parser.add_argument('--roilist',action='store',dest='roilist')
+parser.add_argument('--roilist',action='append',dest='roilist',nargs='*')
 parser.add_argument('--savets',action='store_true',dest='savets')
 parser.add_argument('--skipvols',action='store',dest='skipvols',type=int,default=5)
 parser.add_argument('--lowfreq',action='store',dest='lowfreq',type=float) #,default=0.008)
@@ -35,6 +35,8 @@ parser.add_argument('--motionparam',action='store',dest='mpfile')
 parser.add_argument('--motionparamtype',action='store',dest='mptype',choices=['spm','hcp','fsl'],default='fsl')
 parser.add_argument('--hrffile',action='store',dest='hrffile')
 parser.add_argument('--outlierfile',action='store',dest='outlierfile')
+parser.add_argument('--sequential',action='store_true',dest='sequential',help='Output columns for ALL sequential ROI values from 1:max (otherwise exactly the same columns as input)')
+parser.add_argument('--sequentialerrorsize',action='store',dest='sequentialerrorsize',type=int,default=1000,help='Throw error if using --sequential and largest ROI label is larger than this')
 parser.add_argument('--verbose',action='store_true',dest='verbose')
 
 args=parser.parse_args()
@@ -56,16 +58,23 @@ tr=args.tr
 roilist=args.roilist
 inputpattern=args.inputpattern
 do_savets=args.savets
+do_seqroi=args.sequential
+sequential_error_size=args.sequentialerrorsize
 
+def flatlist(l):
+    if l is None:
+        return []
+    return [x for y in l for x in y]
+    
 if connmeasure is None:
     connmeasure=[['correlation']]
-    
-flatlist=lambda l: [x for y in l for x in y]
 connmeasure=flatlist([x.split(",") for x in flatlist(connmeasure)])
 connmeasure=["partial correlation" if x=="partialcorrelation" else x for x in connmeasure]
 connmeasure=["partial correlation" if x=="partial" else x for x in connmeasure]
 connmeasure=list(set(connmeasure))
 connmeasure.sort() #note: list(set(...)) scrambles the order
+
+roilist=flatlist([x.split(",") for x in flatlist(roilist)])
 
 if 'none' in connmeasure:
     connmeasure=['none']
@@ -105,6 +114,7 @@ print("Skip motion regressors: %s" % (do_nomotion))
 print("Global signal regression: %s" % (do_gsr))
 print("Save denoised time series: %s" % (do_savets))
 print("Connectivity measures: ", connmeasure)
+print("Sequential ROI indexing: %s" % (do_seqroi))
 
 def addderiv(x):
     #xd=np.vstack([np.zeros([1,x.shape[1]]),np.diff(x,axis=0)])
@@ -161,7 +171,7 @@ def loadinput(filename):
         Dt=np.loadtxt(filename)
     
         fid = open(filename, 'r') 
-        roivals=np.arange(Dt.shape[1])+1
+        roivals=np.arange(1,Dt.shape[1]+1)
         roisizes=np.ones(len(roivals))
         while True: 
             line=fid.readline()
@@ -184,7 +194,7 @@ def loadinput(filename):
 if inputpattern and roilist:
     inputvol_list=[]
     roiname_list=[]
-    for roi in roilist.split(","):
+    for roi in roilist:
         if not roi:
             continue
         roiname=roi.split("=")[0]
@@ -193,7 +203,7 @@ if inputpattern and roilist:
 else:
     inputvol_list=[inputvol]
     if roilist:
-        roiname=roilist.split(",")[0].split("=")[0]
+        roiname=roilist[0].split("=")[0]
     else:
         roiname=""
     roiname_list=[roiname]
@@ -202,6 +212,7 @@ did_print_nuisance_size=False
 
 for roiname,inputvol in zip(roiname_list,inputvol_list):
     Dt,roivals,roisizes,tr_input = loadinput(inputvol)
+    print("Loaded input file: %s (%dx%d)" % (inputvol,Dt.shape[0],Dt.shape[1]))
     if tr_input:
         tr=tr_input
 
@@ -335,12 +346,32 @@ for roiname,inputvol in zip(roiname_list,inputvol_list):
         #Dt=nilearn.signal.clean(Dt.copy(), detrend=False, standardize=False, low_pass=bpf[1], high_pass=bpf[0], t_r=tr)
         Dt_clean=fftfilt(Dt_clean, tr, bpf)
 
+   
+    if do_seqroi:
+        #make full 
+        maxroi=np.max(roivals).astype(np.int)
+        if len(roivals) < sequential_error_size and maxroi > sequential_error_size:
+            raise Exception("Maximum ROI label (%d) exceeded allowable size (%d), suggesting a mistake. If this was intentional, set --sequentialerrorsize" % (maxroi,sequential_error_size))
+        roivals_seq=np.arange(1,maxroi+1)
+        roisizes_seq=np.zeros(maxroi)
+        roisizes_seq[roivals.astype(np.int)-1]=roisizes
+        
+        Dt_clean_seq=np.zeros((Dt_clean.shape[0],maxroi),dtype=Dt_clean.dtype)
+        Dt_clean_seq[:,roivals.astype(np.int)-1]=Dt_clean
+        
+        roivals=roivals_seq
+        roisizes=roisizes_seq
+        Dt_clean=Dt_clean_seq.copy()
+    else:
+        pass
+    
+    
     roiheadertxt="ROI_Labels:\n"
     roiheadertxt+=" ".join(["%d" % (x) for x in roivals])
     roiheadertxt+="\nROI_Sizes(voxels):\n"
     roiheadertxt+=" ".join(["%d" % (x) for x in roisizes])
     roiheadertxt+="\nRepetition_time(sec): %g" % (tr)
-   
+
     if do_gsr:
         gsrsuffix="_gsr"
     else:
@@ -361,10 +392,14 @@ for roiname,inputvol in zip(roiname_list,inputvol_list):
     for cm in connmeasure:
         if cm == 'none':
             continue
-        E=nilearn.connectome.ConnectivityMeasure(kind=cm, vectorize=False, discard_diagonal=True)
+        E=nilearn.connectome.ConnectivityMeasure(kind=cm, vectorize=False, discard_diagonal=False)
         C=E.fit_transform([Dt_clean[skipvols:,:]])[0]
+        shrinkage=np.nan
+        if E.cov_estimator.__class__.__name__ == "LedoitWolf":
+            shrinkage=E.cov_estimator_.shrinkage_
         if outputformat == "mat":
-            savemat(outbase+roisuffix+gsrsuffix+"_FC%s.mat" % (connmeasure_shortname[cm]),{"C":C,"roi_labels":roivals,"roi_sizes":roisizes},format='5',do_compression=True)
+            Cdict={"C":C,"roi_labels":roivals,"roi_sizes":roisizes,"shrinkage":shrinkage}
+            savemat(outbase+roisuffix+gsrsuffix+"_FC%s.mat" % (connmeasure_shortname[cm]),Cdict,format='5',do_compression=True)
         else:
             np.savetxt(outbase+roisuffix+gsrsuffix+"_FC%s.txt" % (connmeasure_shortname[cm]),C,fmt="%.18f",header=roiheadertxt,comments="# ")
             

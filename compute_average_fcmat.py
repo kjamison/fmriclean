@@ -20,7 +20,7 @@ def main(argv):
     parser.add_argument('--subjectlist',action='append',dest='subjectlist',nargs='*',required=True)
     parser.add_argument('--output',action='append',dest='outputfiles',nargs='*',required=True)
     parser.add_argument('--scannames',action='append',dest='scannames',nargs='*')
-    
+
     args=parser.parse_args(argv)
     
     subjlistfiles=args.subjectlist
@@ -88,12 +88,12 @@ def main(argv):
                     if matshape is None:
                         matshape=C.shape
                     elif C.shape != matshape:
-                        raise Exception("Matrix size does not match")
+                        raise Exception("Matrix size does not match. Expected [%dx%d], loaded [%dx%d] from %s" % (matshape[0],matshape[1],C.shape[0],C.shape[1],f))
                 
                     if roi_labels is None:
                         roi_labels=M['roi_labels']
                     elif np.any(M['roi_labels'] != roi_labels):
-                        raise Exception("roi_labels does not match")
+                        raise Exception("roi_labels does not match for %s" % (f))
 
                     for i in range(len(subject_lists)):
                         if s in subject_lists[i]:

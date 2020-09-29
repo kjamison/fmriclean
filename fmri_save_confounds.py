@@ -98,7 +98,7 @@ if do_erode_csf:
 else:
     print("CSF volume mask (eroded): %s" % (csffile))
 print("Outlier timepoint file: %s" % (outlierfile))
-print("Ignore first N volumes: %s" % (skipvols))
+print("Consider first N volumes to be outliers: %s" % (skipvols))
 print("Output filename: %s" % (outputfile))
 
 def addderiv(x):
