@@ -6,6 +6,8 @@ import sys
 import argparse
 from scipy.ndimage import binary_erosion
 from scipy.io import savemat
+import scipy.interpolate
+
 import os.path
 
 parser=argparse.ArgumentParser(description='Create file with confound regressors for denoising')
@@ -203,9 +205,18 @@ else:
 
 
 if hrffile is None:
-    import nipy.modalities.fmri.hrf
-    hrf=nipy.modalities.fmri.hrf.spmt(np.arange(numvols)*tr)[:,None]
+    #nipy doesn't work with certain numpy versions, so let's just save it out and interpolate 
+    #import nipy.modalities.fmri.hrf
+    #hrf=nipy.modalities.fmri.hrf.spmt(np.arange(numvols)*tr)[:,None]
     #np.savetxt("hrf_%d.txt" % (numvols),hrf,fmt="%.18f");
+    
+    #this was generated from tr=0.8sec
+    hrf800 = np.array([0,0.00147351,0.0211715,0.0722364,0.136776,0.18755,0.209678,0.20356,0.178095,0.143632,0.10812,0.0761595,0.04961,
+        0.0286445,0.0126525,0.000811689,-0.00764106,-0.0133351,-0.0167838,-0.0184269,-0.0186623,-0.0178584,-0.0163506,-0.0144316,
+        -0.0123414,-0.0102627,-0.00832181,-0.00659499,-0.00511756,-0.00389459,-0.0029108,-0.00213918,-0.00154751,-0.00110304,
+        -0.000775325,-0.000537817,-0.000368396,-0.000249311,-0.000166749,-0.000110239,-7.2023e-05,-4.64699e-05,-2.95653e-05,
+        -1.84943e-05,-1.13126e-05,-6.69581e-06,-3.75333e-06,-1.89321e-06,-7.26446e-07,0])
+    hrf=scipy.interpolate.interp1d(0.8*np.arange(len(hrf800)),hrf800,axis=0,kind="cubic",fill_value=0,bounds_error=False)(np.arange(numvols)*tr)[:,None]
 else:
     hrf=np.loadtxt(hrffile)[:,None]
     if hrf.shape[0] < D.shape[-1]:
