@@ -16,7 +16,7 @@ parser.add_argument('--roifile',action='append',dest='roifile',help='ROI atlas l
 parser.add_argument('--outbase',action='store',dest='outbase')
 parser.add_argument('--sequential',action='store_true',dest='sequential',help='Output columns for ALL sequential ROI values from 1:max (otherwise only unique values in ROI volume)')
 parser.add_argument('--sequentialerrorsize',action='store',dest='sequentialerrorsize',type=int,default=1000,help='Throw error if using --sequential and largest ROI label is larger than this')
-parser.add_argument('--outputformat',action='store',dest='outputformat',choices=['mat','txt'],default='txt')
+parser.add_argument('--outputformat',action='store',dest='outputformat',choices=['mat','txt'],default='mat')
 parser.add_argument('--verbose',action='store_true',dest='verbose')
 
 args=parser.parse_args()

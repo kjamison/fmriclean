@@ -26,6 +26,14 @@ fi
 
 do_preproc=1
 do_connmeasure=0
+do_concat=0
+
+#bpfarg="--lowfreq 0.008 --highfreq 0.09"
+#hpfarg="--lowfreq 0.008"
+
+bpfarg="--lowfreq 0.01 --highfreq 0.15"
+hpfarg="--lowfreq 0.01"
+skipvolarg="--skipvols 10"
 
 #preproc for ALL atlases (fs86,cc200,cc400,shen268,cocoA,cocoB) takes 22min/subj when using 16 jobs on m5a.8xlarge (32 vCPU), or 8 jobs on m5a.4xlarge(16 CPU), etc..
 # (note: if we use more than half the vCPU things start taking a lot longer)
@@ -39,6 +47,16 @@ if [ "$2" = "-onlyconn" ]; then
 	newroi=""
 	do_preproc=0
 	do_connmeasure=1
+	newroi="$3"
+elif [ "$2" = "-conn" ]; then
+	newroi=""
+	do_connmeasure=1
+	newroi="$3"
+elif [ "$2" = "-concat" ]; then
+	newroi=""
+	do_preproc=0
+	do_connmeasure=0
+	do_concat=1
 	newroi="$3"
 else
 	newroi="$2"
@@ -179,11 +197,15 @@ else
 	roilist="${roilist_new}"
 fi
 
+
+inputpattern_list=""
+confoundfile_list=""
+
 opts=
 for r in rfMRI_REST1_LR rfMRI_REST1_RL rfMRI_REST2_LR rfMRI_REST2_RL; do
 	
 	resultsdir=${studydir}/${subject}/MNINonLinear/Results/${r}
-	
+
 	if [ "$do_preproc"  = 1 ]; then 
 		mkdir -p ${resultsdir}
 
@@ -228,23 +250,40 @@ for r in rfMRI_REST1_LR rfMRI_REST1_RL rfMRI_REST2_LR rfMRI_REST2_RL; do
 	fi
 
 	if [ "$do_connmeasure"  = 1 ]; then
-		bpfarg="--lowfreq 0.008 --highfreq 0.09"
-		hpfarg="--lowfreq 0.008"
 		for filtargname in "nofilt@--nocompcor" "bpf@$bpfarg" "hpf@$hpfarg"; do
 			for gsrarg in "" "--gsr"; do
 				filtname=${filtargname/@*/""}
 				filtarg=${filtargname/*@/""}
-				python $HOME/fmri_clean_parcellated_timeseries.py --inputpattern "${studydir}/${subject}_${r}_%s_ts.mat" --roilist ${roilist} --confoundfile ${studydir}/${subject}_${r}_fmriclean_confounds.mat --filterstrategy connregbp $filtarg $gsrarg --outbase ${studydir}/${subject}_${r}_fmriclean_${filtname} --skipvols 5 --connmeasure precision partialcorrelation correlation covariance --outputformat mat >> ${cleanlog} 2>&1
+				python $HOME/fmri_clean_parcellated_timeseries.py --inputpattern "${studydir}/${subject}_${r}_%s_ts.mat" --roilist ${roilist} --confoundfile ${studydir}/${subject}_${r}_fmriclean_confounds.mat $filtarg $gsrarg --outbase ${studydir}/${subject}_${r}_fmriclean_${filtname} ${skipvolarg}--connmeasure precision partialcorrelation correlation covariance --outputformat mat --sequentialroi >> ${cleanlog} 2>&1
 			done
 		done
-		aws s3 sync ${studydir} ${s3root}/HCP/${subject}_fmriclean/ --exclude "*" --include "${subject}_${r}_fmriclean_*_ts.txt" --include "${subject}_${r}_*FC*.mat" --include "${subject}_${r}_*FC*.mat" --include "${subject}_${r}_fmriclean_*.log"
+		aws s3 sync ${studydir} ${s3root}/HCP/${subject}_fmriclean/ --exclude "*" --include "${subject}_${r}_fmriclean_*_ts.txt" --include "${subject}_${r}_fmriclean_*_ts.mat" --include "${subject}_${r}_*FC*.mat" --include "${subject}_${r}_fmriclean_*.log"
 	fi
-
-	rm -f ${studydir}/${subject}_${r}_*
 	
+	inputpattern_list+=" ${studydir}/${subject}_${r}_%s_ts.mat"
+	confoundfile_list+=" ${studydir}/${subject}_${r}_fmriclean_confounds.mat"
+	
+	if [ "${do_concat}" = "0" ]; then
+		rm -f ${studydir}/${subject}_${r}_*
+	fi
 	#outzipname_scan=${studydir}/${subject}_${r}_fmriclean.zip
 	#zip ${outzipname_scan} ${subject}_${r}_outlier* ${subject}_${r}_fmriclean_*
 done
+
+if [ "${do_concat}" = "1" ]; then
+	cleanlog=${studydir}/${subject}_concat_fmriclean_connmat.log
+	rm -f ${cleanlog}
+	/bin/date >> ${cleanlog}
+	for filtargname in "nofilt@--nocompcor" "bpf@$bpfarg --filterstrategy connregbp" "hpf@$hpfarg --filterstrategy connregbp" "bpfseq@$bpfarg --filterstrategy seq" "hpfseq@$hpfarg --filterstrategy seq"; do
+		for gsrarg in "" "--gsr"; do
+			filtname=${filtargname/@*/""}
+			filtarg=${filtargname/*@/""}
+			python $HOME/fmri_clean_parcellated_timeseries.py --inputpattern ${inputpattern_list} --roilist ${roilist} --confoundfile ${confoundfile_list} $filtarg $gsrarg --outbase ${studydir}/${subject}_concat_fmriclean_${filtname} ${skipvolarg} --connmeasure covariance --outputformat mat --sequentialroi --concat --shrinkage 0  >> ${cleanlog} 2>&1
+		done
+	done
+	
+	aws s3 sync ${studydir} ${s3root}/HCP/${subject}_fmriclean/ --exclude "*" --include "${subject}_concat_fmriclean_*_ts.txt" --include "${subject}_concat_fmriclean_*_ts.mat" --include "${subject}_concat_*FC*.mat" --include "${subject}_concat_fmriclean_*.log"
+fi
 
 #for f in $( cat ${ziplistfile_todelete} ); do
 #	rm -f $f
