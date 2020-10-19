@@ -1,4 +1,5 @@
 import numpy as np
+import nibabel as nib
 import nilearn
 import nilearn.connectome
 #import nipy.modalities.fmri.hrf
@@ -20,11 +21,6 @@ def flatarglist(l):
         return []
     return flatlist([x.split(",") for x in flatlist(l)])
 
-#need some way to specify which denoising I want to do:
-#enable/disable:
-#filtering (already set)
-#gsr (single flag right now)
-#compcor
 parser=argparse.ArgumentParser(description='fMRI Denoising after parcellation')
 
 parser.add_argument('--input',action='append',dest='inputvol',nargs='*')
@@ -256,6 +252,37 @@ def fftfilt(x,tr,filt,filter_edge_rolloff=None):
         fy *= np.atleast_2d(passwin).T
     y=np.real(np.fft.ifft(fy,axis=0)[:x.shape[0],:])
     return y
+
+def nanfft(S,tr,outliermat=None,inverse=False):
+    #perform fft (or ifft) ignoring NaN or outlier timepoints
+    N=S.shape[0]
+    
+    if inverse:
+        expsign=1
+        denom=N
+    else:
+        expsign=-1
+        denom=1
+        
+    #build FFT basis set
+    n=np.atleast_2d(np.arange(N))
+    X=np.zeros((N,N),dtype=np.complex)
+    for k in range(N):
+        X[k,:]=np.exp(expsign*1j*2*np.pi*k*n/N)
+        
+    notnan=~np.any(np.isnan(S),axis=1)
+    if outliermat is not None:
+        if outliermat.ndim > 1:
+            notnan[np.sum(np.abs(outliermat),axis=0)>0]=False
+        else:
+            notnan[outliermat!=0]=False
+
+    fy=X[:,notnan] @ S[notnan,:] / denom
+    
+    f=np.arange(N)
+    f=np.minimum(f,N-f)/(tr*N)
+    
+    return fy, f
     
 def dctfilt(S,tr,filt,filter_edge_rolloff=None,outliermat=None):
     N=S.shape[0]
@@ -297,6 +324,9 @@ def dctfilt(S,tr,filt,filter_edge_rolloff=None,outliermat=None):
 
 def loadinput(filename):
     tr=None
+    volinfo=None
+    roivals=None
+    roisizes=None
     if filename.lower().endswith(".mat"):
         M=loadmat(filename)
         Dt=M['ts']
@@ -304,7 +334,14 @@ def loadinput(filename):
             tr=M['repetition_time'][0]
         roivals=M['roi_labels'][0]
         roisizes=M['roi_sizes'][0]
-    else:
+    elif filename.lower().endswith(".nii.gz"):
+        Vimg=nib.load(filename)
+        V=Vimg.get_fdata()
+        M=np.any(V!=0,axis=3)
+        Dt=V[M>0].T
+        tr=Vimg.header['pixdim'][4]
+        volinfo={'image':Vimg, 'shape':Vimg.shape, 'mask':M}
+    elif filename.lower().endswith(".txt"):
         Dt=np.loadtxt(filename)
     
         fid = open(filename, 'r') 
@@ -326,22 +363,42 @@ def loadinput(filename):
         fid.close()
         roivals=np.array([float(x) for x in roivals])
         roisizes=np.array([float(x) for x in roisizes])
-    return Dt,roivals,roisizes,tr
-    
-def save_timeseries(filename_noext,outputformat,output_dict):
-    if outputformat == "mat":
-        savemat(filename_noext+"."+outputformat,output_dict,format='5',do_compression=True)
     else:
-        headertxt="ROI_Labels:\n"
-        headertxt+=" ".join(["%d" % (x) for x in output_dict["roi_labels"]])
-        headertxt+="\nROI_Sizes(voxels):\n"
-        headertxt+=" ".join(["%d" % (x) for x in output_dict["roi_sizes"]])
-        headertxt+="\nRepetition_time(sec): %g" % (output_dict["repetition_time"])
-        np.savetxt(filename_noext+"."+outputformat,output_dict["ts"],fmt="%.18f",header=headertxt,comments="# ")
+        raise Exception("Unknown input data file type: %s" % (filename))
+    return Dt,roivals,roisizes,tr,volinfo
+    
+def save_timeseries(filename_noext,outputformat,output_dict, output_volume_info=None):
+    outfilename=""
+    shapestring=""
+    if output_volume_info is not None:
+        Vimg_orig=output_volume_info['image']
+        Vnew=np.zeros(Vimg_orig.shape,dtype=Vimg_orig.get_data_dtype())
+        Vnew[output_volume_info['mask']]=output_dict["ts"].T
+        Vimg=nib.Nifti1Image(Vnew.astype(Vimg_orig.get_data_dtype()),affine=Vimg_orig.affine,header=Vimg_orig.header)
+        outfilename=filename_noext+".nii.gz"
+        shapestring="x".join([str(x) for x in Vimg.shape])
+        nib.save(Vimg, outfilename)
+    else:
+        shapestring="%dx%d" % (output_dict["ts"].shape[0],output_dict["ts"].shape[1])
+        if outputformat == "mat":
+            outfilename=filename_noext+"."+outputformat
+            savemat(outfilename,output_dict,format='5',do_compression=True)
+        else:
+            headertxt="ROI_Labels:\n"
+            headertxt+=" ".join(["%d" % (x) for x in output_dict["roi_labels"]])
+            headertxt+="\nROI_Sizes(voxels):\n"
+            headertxt+=" ".join(["%d" % (x) for x in output_dict["roi_sizes"]])
+            headertxt+="\nRepetition_time(sec): %g" % (output_dict["repetition_time"])
+            outfilename=filename_noext+"."+outputformat
+            np.savetxt(outfilename,output_dict["ts"],fmt="%.18f",header=headertxt,comments="# ")
+    return outfilename, shapestring
 
 def save_connmatrix(filename_noext,outputformat,output_dict):
+    outfilename=""
+    shapestring="%dx%d" % (output_dict["C"].shape[0],output_dict["C"].shape[1])
     if outputformat == "mat":
-        savemat(filename_noext+"."+outputformat,output_dict,format='5',do_compression=True)
+        outfilename=filename_noext+"."+outputformat
+        savemat(outfilename,output_dict,format='5',do_compression=True)
     else:
         headertxt="ROI_Labels:\n"
         headertxt+=" ".join(["%d" % (x) for x in output_dict["roi_labels"]])
@@ -349,7 +406,9 @@ def save_connmatrix(filename_noext,outputformat,output_dict):
         headertxt+=" ".join(["%d" % (x) for x in output_dict["roi_sizes"]])
         headertxt+="\nCovariance_estimator: %s" % (output_dict["cov_estimator"])
         headertxt+="\nCovariance_shrinkage: %s" % (output_dict["cov_shrinkage"])
-        np.savetxt(filename_noext+"."+outputformat,output_dict["C"],fmt="%.18f",header=headertxt,comments="# ")
+        outfilename=filename_noext+"."+outputformat
+        np.savetxt(outfilename,output_dict["C"],fmt="%.18f",header=headertxt,comments="# ")
+    return outfilename, shapestring
             
 def compute_connmatrix(ts,conntype,input_shrinkage="lw"):
     if input_shrinkage.lower() == "lw":
@@ -475,7 +534,7 @@ for roiname in roiname_list:
             inputfile=inputitem % (roiname)
         else:
             inputfile=inputitem
-        Dt,roivals,roisizes,tr_input = loadinput(inputfile)
+        Dt,roivals,roisizes,tr_input,vol_info = loadinput(inputfile)
         print("Loaded input file: %s (%dx%d)" % (inputfile,Dt.shape[0],Dt.shape[1]))
         if tr_input:
             tr=tr_input
@@ -565,9 +624,9 @@ for roiname in roiname_list:
             print("Total nuisance regressors after %s filter: %d" % (bpfmode,confounds.shape[1]))
         
         if bpfmode=="orth":
-            Dt_clean=nilearn.signal.clean(Dt, confounds=confounds, standardize='zscore', t_r=tr, detrend=False,low_pass=bpf[1], high_pass=bpf[0])
+            Dt_clean=nilearn.signal.clean(Dt, confounds=confounds, standardize=False, t_r=tr, detrend=False,low_pass=bpf[1], high_pass=bpf[0])
         else:
-            Dt_clean=nilearn.signal.clean(Dt, confounds=confounds, standardize='zscore', t_r=tr, detrend=False)
+            Dt_clean=nilearn.signal.clean(Dt, confounds=confounds, standardize=False, t_r=tr, detrend=False)
 
         if bpfmode=="connregbp":
             #Dt=nilearn.signal.clean(Dt.copy(), detrend=False, standardize=False, low_pass=bpf[1], high_pass=bpf[0], t_r=tr)
@@ -617,9 +676,9 @@ for roiname in roiname_list:
         else:
             roisuffix=""
     
-        if do_savets and notlen(outbase_list)==num_inputs:
-            save_timeseries(outbase_list[inputidx]+roisuffix+gsrsuffix+"_tsclean", outputformat, {"ts":Dt_clean,"roi_labels":roivals, "roi_sizes":roisizes,"repetition_time":tr})
-            print("Saved %s%s%s_tsclean.%s (%dx%d)" % (outbase_list[inputidx],roisuffix,gsrsuffix,outputformat,Dt_clean.shape[0],Dt_clean.shape[1]))
+        if do_savets and len(outbase_list)==num_inputs:
+            savedfilename, shapestring = save_timeseries(outbase_list[inputidx]+roisuffix+gsrsuffix+"_tsclean", outputformat, {"ts":Dt_clean,"roi_labels":roivals, "roi_sizes":roisizes,"repetition_time":tr}, vol_info)
+            print("Saved %s (%s)" % (savedfilename,shapestring))
     
         #note: skipvols is already included in outlierflat
         Dt_clean_outlierfree=normalize(Dt_clean[outlierflat==0,:])
@@ -630,12 +689,14 @@ for roiname in roiname_list:
             for cm in connmeasure:
                 if cm == 'none':
                     continue
-
+                if vol_info is not None:
+                    print("Connectivity matrices for voxelwise input is currently disabled!")
+                    continue
                 C,shrinkage,covest_class = compute_connmatrix(Dt_clean_outlierfree, cm, input_shrinkage)
         
                 Cdict={"C":C,"roi_labels":roivals,"roi_sizes":roisizes,"shrinkage":shrinkage,'cov_estimator':covest_class}
-                save_connmatrix(outbase_list[inputidx]+roisuffix+gsrsuffix+"_FC%s" % (connmeasure_shortname[cm]),outputformat,Cdict)
-                print("Saved %s%s%s_FC%s.%s (%dx%d)" % (outbase_list[inputidx],roisuffix,gsrsuffix,connmeasure_shortname[cm],outputformat,C.shape[0],C.shape[1]))
+                savedfilename, shapestring = save_connmatrix(outbase_list[inputidx]+roisuffix+gsrsuffix+"_FC%s" % (connmeasure_shortname[cm]),outputformat,Cdict)
+                print("Saved %s (%s)" % (savedfilename,shapestring))
 
     if not do_concat:
         continue
@@ -650,17 +711,20 @@ for roiname in roiname_list:
     else:
         roisuffix=""
         
+    #concatenate multiple scans 
     Dt_clean_outlierfree=np.vstack(outlier_free_data_list)
     
     for cm in connmeasure:
         if cm == 'none':
             continue
-
+        if vol_info is not None:
+            print("Connectivity matrices for voxelwise input is currently disabled!")
+            continue
         C,shrinkage,covest_class = compute_connmatrix(Dt_clean_outlierfree, cm, input_shrinkage)
         
         Cdict={"C":C,"roi_labels":roivals,"roi_sizes":roisizes,"shrinkage":shrinkage,'cov_estimator':covest_class}
-        save_connmatrix(outbase_list[0]+roisuffix+gsrsuffix+"_FC%s" % (connmeasure_shortname[cm]),outputformat,Cdict)
-        print("Saved %s%s%s_FC%s.%s (%dx%d)" % (outbase_list[0],roisuffix,gsrsuffix,connmeasure_shortname[cm],outputformat,C.shape[0],C.shape[1]))
+        savedfilename, shapestring = save_connmatrix(outbase_list[0]+roisuffix+gsrsuffix+"_FC%s" % (connmeasure_shortname[cm]),outputformat,Cdict)
+        print("Saved %s (%s)" % (savedfilename,shapestring))
 ######################################
 ######################################
 ######################################
