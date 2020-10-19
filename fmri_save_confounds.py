@@ -92,9 +92,9 @@ print("Input time series: %s" % (inputvol))
 print("Motion parameter file (%s-style): %s" % (movfile_type,movfile))
 print("Gray-matter volume mask: %s" % (gmfile))
 if do_erode_wm:
-    print("White-matter volume mask: %s" % (gmfile))
+    print("White-matter volume mask: %s" % (wmfile))
 else:
-    print("White-matter volume mask (eroded): %s" % (gmfile))
+    print("White-matter volume mask (eroded): %s" % (wmfile))
 if do_erode_csf:
     print("CSF volume mask: %s" % (csffile))
 else:
