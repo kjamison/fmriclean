@@ -33,7 +33,7 @@ parser.add_argument('--skipvols',action='store',dest='skipvols',type=int,default
 parser.add_argument('--lowfreq',action='store',dest='lowfreq',type=float) #,default=0.008)
 parser.add_argument('--highfreq',action='store',dest='highfreq',type=float)# ,default=0.09)
 parser.add_argument('--repetitiontime','-tr',action='store',dest='tr',help='TR in seconds',type=float)
-parser.add_argument('--filterstrategy',action='store',dest='filterstrategy',choices=['connregbp','orth','seq','none'],default='connregbp')
+parser.add_argument('--filterstrategy',action='store',dest='filterstrategy',choices=['connregbp','orth','parallel','none'],default='connregbp')
 parser.add_argument('--connmeasure',action='append',dest='connmeasure',choices=['none','correlation','partialcorrelation','precision','covariance'],nargs='*')
 parser.add_argument('--outputformat',action='store',dest='outputformat',choices=['mat','txt'],default='mat')
 parser.add_argument('--gsr',action='store_true',dest='gsr')
@@ -273,7 +273,7 @@ def nanfft(S,tr,outliermat=None,inverse=False):
     notnan=~np.any(np.isnan(S),axis=1)
     if outliermat is not None:
         if outliermat.ndim > 1:
-            notnan[np.sum(np.abs(outliermat),axis=0)>0]=False
+            notnan[np.sum(np.abs(outliermat),axis=1)>0]=False
         else:
             notnan[outliermat!=0]=False
 
@@ -334,13 +334,19 @@ def loadinput(filename):
             tr=M['repetition_time'][0]
         roivals=M['roi_labels'][0]
         roisizes=M['roi_sizes'][0]
-    elif filename.lower().endswith(".nii.gz"):
+    elif filename.lower().endswith(".nii.gz") or filename.lower().endswith(".nii"):
+        if filename.lower().endswith(".gz"):
+            volext=".".join(filename.lower().split(".")[-2:])
+        else:
+            volext=filename.lower().split(".")[-1]
+
+            
         Vimg=nib.load(filename)
         V=Vimg.get_fdata()
         M=np.any(V!=0,axis=3)
         Dt=V[M>0].T
         tr=Vimg.header['pixdim'][4]
-        volinfo={'image':Vimg, 'shape':Vimg.shape, 'mask':M}
+        volinfo={'image':Vimg, 'shape':Vimg.shape, 'mask':M, "extension":volext}
     elif filename.lower().endswith(".txt"):
         Dt=np.loadtxt(filename)
     
@@ -372,10 +378,13 @@ def save_timeseries(filename_noext,outputformat,output_dict, output_volume_info=
     shapestring=""
     if output_volume_info is not None:
         Vimg_orig=output_volume_info['image']
-        Vnew=np.zeros(Vimg_orig.shape,dtype=Vimg_orig.get_data_dtype())
+        outshape=list(Vimg_orig.shape[:3])
+        if output_dict["ts"].ndim > 1:
+            outshape+=[output_dict["ts"].shape[0]]
+        Vnew=np.zeros(outshape,dtype=Vimg_orig.get_data_dtype())
         Vnew[output_volume_info['mask']]=output_dict["ts"].T
         Vimg=nib.Nifti1Image(Vnew.astype(Vimg_orig.get_data_dtype()),affine=Vimg_orig.affine,header=Vimg_orig.header)
-        outfilename=filename_noext+".nii.gz"
+        outfilename=filename_noext+"."+output_volume_info["extension"]
         shapestring="x".join([str(x) for x in Vimg.shape])
         nib.save(Vimg, outfilename)
     else:
@@ -610,7 +619,7 @@ for roiname in roiname_list:
             did_print_nuisance_size=True
             
         
-        if bpfmode=="seq":
+        if bpfmode=="parallel":
             #nilearn filters confounds, filters signals, and then denoises filtered(signals) with filtered(confounds)
             #but how does this handle outlier regressors? filtering is going to blur those out in weird ways
             #raise Exception("seq filtering hasn't been tested AT ALL yet.")
@@ -647,7 +656,6 @@ for roiname in roiname_list:
             #Dt_clean=fftfilt(naninterp(Dt_clean,outliermat=outlierflat), tr, bpf, scipy.signal.gaussian(21,5))
             #Dt_clean=fftfilt(Dt_clean, tr, bpf)
 
-   
         if do_seqroi:
             #make full 
             maxroi=np.max(roivals).astype(np.int)

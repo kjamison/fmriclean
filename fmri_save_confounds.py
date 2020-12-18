@@ -24,6 +24,7 @@ parser.add_argument('--wmmask',action='store',dest='wmfile',help='white-matter m
 parser.add_argument('--csfmask',action='store',dest='csffile',help='CSF mask')
 parser.add_argument('--ewmmask',action='store',dest='ewmfile',help='white-matter mask ALREADY eroded')
 parser.add_argument('--ecsfmask',action='store',dest='ecsffile',help='CSF mask ALREADY eroded')
+parser.add_argument('--erosionvoxels',action='store',dest='erosionvoxels',type=int,default=1,help='Number of voxels to erode for WM/CSF')
 parser.add_argument('--hrffile',action='store',dest='hrffile')
 parser.add_argument('--outlierfile',action='store',dest='outlierfile')
 parser.add_argument('--skipvols',action='store',dest='skipvols',type=int,default=5)
@@ -39,6 +40,7 @@ movfile_type=args.mptype.lower()
 outlierfile=args.outlierfile
 skipvols=args.skipvols
 outputfile=args.outputfile
+erosionvoxels=args.erosionvoxels
 verbose=args.verbose
 
 wmfile=None
@@ -99,6 +101,7 @@ if do_erode_csf:
     print("CSF volume mask: %s" % (csffile))
 else:
     print("CSF volume mask (eroded): %s" % (csffile))
+print("Erosion voxels: %d (%dx%dx%d box)",erosionvoxels,erosionvoxels*2+1,erosionvoxels*2+1,erosionvoxels*2+1)
 print("Outlier timepoint file: %s" % (outlierfile))
 print("Consider first N volumes to be outliers: %s" % (skipvols))
 print("Output filename: %s" % (outputfile))
@@ -210,7 +213,7 @@ if hrffile is None:
     #hrf=nipy.modalities.fmri.hrf.spmt(np.arange(numvols)*tr)[:,None]
     #np.savetxt("hrf_%d.txt" % (numvols),hrf,fmt="%.18f");
     
-    #this was generated from tr=0.8sec
+    #this was generated from tr=0.8sec, which we then resample to the TR of the input data
     hrf800 = np.array([0,0.00147351,0.0211715,0.0722364,0.136776,0.18755,0.209678,0.20356,0.178095,0.143632,0.10812,0.0761595,0.04961,
         0.0286445,0.0126525,0.000811689,-0.00764106,-0.0133351,-0.0167838,-0.0184269,-0.0186623,-0.0178584,-0.0163506,-0.0144316,
         -0.0123414,-0.0102627,-0.00832181,-0.00659499,-0.00511756,-0.00389459,-0.0029108,-0.00213918,-0.00154751,-0.00110304,
@@ -233,10 +236,12 @@ ewmimg=None
 if gmfile:
     gmimg=nib.load(gmfile)
     
+erosionbox=np.ones((erosionvoxels*2+1,erosionvoxels*2+1,erosionvoxels*2+1))>0
+
 if csffile:
     if do_erode_csf:
         csfimg=nib.load(csffile)
-        csfnew=binary_erosion(csfimg.get_fdata()>0,structure=np.ones((3,3,3))>0)
+        csfnew=binary_erosion(csfimg.get_fdata()>0,structure=erosionbox)
         ecsfimg=nib.Nifti1Image(csfnew,affine=csfimg.affine,header=csfimg.header)
     else:
         ecsfimg=nib.load(csffile)
@@ -244,7 +249,7 @@ if csffile:
 if wmfile:
     if do_erode_wm:
         wmimg=nib.load(wmfile)
-        wmnew=binary_erosion(wmimg.get_fdata()>0,structure=np.ones((3,3,3))>0)
+        wmnew=binary_erosion(wmimg.get_fdata()>0,structure=erosionbox)
         ewmimg=nib.Nifti1Image(wmnew,affine=csfimg.affine,header=csfimg.header)
     else:
         ewmimg=nib.load(wmfile)
