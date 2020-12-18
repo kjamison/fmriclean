@@ -113,6 +113,7 @@ def loadinput(filename):
     volinfo=None
     roivals=None
     roisizes=None
+    extension=None
     if filename.lower().endswith(".mat"):
         M=loadmat(filename)
         Dt=M['ts']
@@ -120,6 +121,7 @@ def loadinput(filename):
             tr=M['repetition_time'][0]
         roivals=M['roi_labels'][0]
         roisizes=M['roi_sizes'][0]
+        extension="mat"
     elif filename.lower().endswith(".nii.gz") or filename.lower().endswith(".nii"):
         if filename.lower().endswith(".gz"):
             volext=".".join(filename.lower().split(".")[-2:])
@@ -132,6 +134,7 @@ def loadinput(filename):
         Dt=V[M>0].T
         tr=Vimg.header['pixdim'][4]
         volinfo={'image':Vimg, 'shape':Vimg.shape, 'mask':M, "extension":volext}
+        extension=volext
     elif filename.lower().endswith(".txt"):
         Dt=np.loadtxt(filename)
     
@@ -154,9 +157,10 @@ def loadinput(filename):
         fid.close()
         roivals=np.array([float(x) for x in roivals])
         roisizes=np.array([float(x) for x in roisizes])
+        extension="txt"
     else:
         raise Exception("Unknown input data file type: %s" % (filename))
-    return Dt,roivals,roisizes,tr,volinfo
+    return Dt,roivals,roisizes,tr,volinfo,extension
     
 def save_timeseries(filename_noext,outputformat,output_dict, output_volume_info=None):
     outfilename=""
@@ -173,6 +177,7 @@ def save_timeseries(filename_noext,outputformat,output_dict, output_volume_info=
         shapestring="x".join([str(x) for x in Vimg.shape])
         nib.save(Vimg, outfilename)
     else:
+        output_dict["ts"]=np.atleast_2d(output_dict["ts"])
         shapestring="%dx%d" % (output_dict["ts"].shape[0],output_dict["ts"].shape[1])
         if outputformat == "mat":
             outfilename=filename_noext+"."+outputformat
@@ -247,7 +252,7 @@ if len(outlierfile_list)==num_inputs:
 for inputidx,inputfile in enumerate(input_list):
     confounds_dict=confounds_list[inputidx]
 
-    Dt,roivals,roisizes,tr_input,vol_info = loadinput(inputfile)
+    Dt,roivals,roisizes,tr_input,vol_info,input_extension = loadinput(inputfile)
     print("Loaded input file: %s (%dx%d)" % (inputfile,Dt.shape[0],Dt.shape[1]))
     if tr_input:
         tr=tr_input
@@ -278,8 +283,8 @@ for inputidx,inputfile in enumerate(input_list):
     ts_alff=np.mean(F[(freq>=bpf[0]) & (freq<=bpf[1]),:],axis=0)
     ts_falff =ts_alff / np.mean(F[freq>=bpf[0],:],axis=0)
     
-    savedfilename, shapestring = save_timeseries(outbase_list[inputidx]+"_alff", "", {"ts":ts_alff}, vol_info)
+    savedfilename, shapestring = save_timeseries(outbase_list[inputidx]+"_alff", input_extension, {"ts":ts_alff,"roi_labels":roivals,"roi_sizes":roisizes,"repetition_time":tr}, vol_info)
     print("Saved %s (%s)" % (savedfilename,shapestring))
     
-    savedfilename, shapestring = save_timeseries(outbase_list[inputidx]+"_falff", "", {"ts":ts_falff}, vol_info)
+    savedfilename, shapestring = save_timeseries(outbase_list[inputidx]+"_falff", input_extension, {"ts":ts_falff,"roi_labels":roivals,"roi_sizes":roisizes,"repetition_time":tr}, vol_info)
     print("Saved %s (%s)" % (savedfilename,shapestring))

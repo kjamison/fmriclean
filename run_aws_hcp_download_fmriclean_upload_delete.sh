@@ -19,6 +19,11 @@ do_concat=0
 #connarg="--connmeasure precision partialcorrelation correlation covariance"
 connarg="--connmeasure covariance --shrinkage 0"
 
+isAWSpipeline=0
+if [ -e ${HOME}/startup_tags.json ]; then
+    isAWSpipeline=1
+fi
+
 #################################
 
 
@@ -56,6 +61,10 @@ if [ "x$Subject" = "x" ]; then
 		do_connmeasure=0
 		do_concat=1
 		newroi="$3"
+    elif [ "$2" = "-conn_and_concat" ]; then
+        do_connmeasure=1
+        do_concat=1
+        newroi="$3"
 	elif [ "$2" = "-concatday" ]; then
 		newroi=""
 		do_preproc=0
@@ -84,25 +93,36 @@ outputprefix=""
 #################################
 
 #try to stop python/numpy from secretly using extra cores sometimes
-export OPENBLAS_NUM_THREADS=1
-export MKL_NUM_THREADS=1
+if [ "$isAWSpipeline" = 0 ]; then
+    export OPENBLAS_NUM_THREADS=1
+    export MKL_NUM_THREADS=1
+fi
 
+export FMRICLEANDIR=$HOME/fmriclean
 
-export FSLOUTPUTTYPE=NIFTI_GZ
 export FSLDIR=$HOME/fsl
+#aws s3 sync s3://kuceyeski-wcm-temp/kwj2001/fsl/ $FSLDIR/ && chmod -R +x $FSLDIR/bin
+export FSLOUTPUTTYPE=NIFTI_GZ
 source $FSLDIR/etc/fslconf/fsl.sh
-	
+
 mrtrixdir=${HOME}/mrtrix3/bin
+#aws s3 cp s3://kuceyeski-wcm-temp/kwj2001/mrtrix3.tar.gz $HOME/ && (cd $HOME; tar -xf mrtrix3.tar.gz ) && rm -f $HOME/mrtrix3.tar.gz && chmod -R +x $HOME/mrtrix3/bin
+
+if [ ! -e $FMRICLEANDIR/fmri_clean_parcellated_timeseries.py ]; then
+    ( cd $HOME; git clone https://github.com/kjamison/fmriclean.git )
+fi
+
+export PATH=$PATH:$FSLDIR/bin
+export PATH=$PATH:$mrtrixdir
+
+export CONDAPATH=$HOME/miniconda
+export PATH=$CONDAPATH/bin:$PATH
+source $CONDAPATH/etc/profile.d/conda.sh
+conda activate base
 
 s3roipath=s3://kuceyeski-wcm-temp/kwj2001/nemo2/nemo_atlases
 
-if [ ! -e "$( which labelconvert )" ]; then
-	export PATH=$PATH:$mrtrixdir
-fi
 
-if [ ! -e "$( which fslmaths )" ]; then
-	export PATH=$PATH:$FSLDIR/bin
-fi
 
 
 #preproc for ALL atlases (fs86,cc200,cc400,shen268,cocoA,cocoB) takes 22min/subj when using 16 jobs on m5a.8xlarge (32 vCPU), or 8 jobs on m5a.4xlarge(16 CPU), etc..
@@ -190,6 +210,13 @@ else
 			aws s3 cp ${s3studyroot}/output_${subject}/${subject}_hcpstruct.zip ./
 			unzip -qo ${subject}_hcpstruct.zip "${subject}/MNINonLinear/*"
 			rm -rf ${subject}_hcpstruct.zip
+            
+            aws s3 sync ${s3studyroot}/output_${subject} ./ --exclude "*" --include "${subject}_hcpmmp_aseg_aal3_sgmfix_thalFS7*.zip"
+            for z in ${subject}_hcpmmp_aseg_aal3_sgmfix_thalFS7*.zip; do
+    			unzip -qo $z "${subject}_hcpmmp_aseg_aal3_sgmfix_thalFS7*_seq.mni2mm.nii.gz"
+                rm -f $z
+            done
+
 		fi
 		find ${studydir}/ -type f > ${ziplistfile_todelete}
 	
@@ -312,11 +339,11 @@ for r in ${ScanList}; do
 		
 		scandir=${mnidir}/Results/${r}
 		pigz -p 2 -df ${scandir}/${scanfile}.nii.gz
-		python $HOME/fmri_outlier_detection.py --input ${scandir}/${scanfile}.nii --mask ${scandir}/brainmask_fs.2.nii.gz --motionparam ${scandir}/Movement_Regressors.txt --motionparamtype hcp --connstandard --output ${studydir}/${subject}_${r}_outliers.txt --outputparams ${studydir}/${subject}_${r}_outlier_parameters.mat >> ${cleanlog} 2>&1
+		python $FMRICLEANDIR/fmri_outlier_detection.py --input ${scandir}/${scanfile}.nii --mask ${scandir}/brainmask_fs.2.nii.gz --motionparam ${scandir}/Movement_Regressors.txt --motionparamtype hcp --connstandard --output ${studydir}/${subject}_${r}_outliers.txt --outputparams ${studydir}/${subject}_${r}_outlier_parameters.mat >> ${cleanlog} 2>&1
 	
-		python $HOME/fmri_save_confounds.py --input ${scandir}/${scanfile}.nii --hcpmnidir ${mnidir} --hcpscanname ${r} --outlierfile ${studydir}/${subject}_${r}_outliers.txt --skipvols 5 --output ${studydir}/${subject}_${r}_fmriclean_confounds.mat >> ${cleanlog} 2>&1
+		python $FMRICLEANDIR/fmri_save_confounds.py --input ${scandir}/${scanfile}.nii --hcpmnidir ${mnidir} --hcpscanname ${r} --outlierfile ${studydir}/${subject}_${r}_outliers.txt --skipvols 5 --output ${studydir}/${subject}_${r}_fmriclean_confounds.mat >> ${cleanlog} 2>&1
 
-		python $HOME/fmri_save_parcellated_timeseries.py --input ${scandir}/${scanfile}.nii --roifile ${roilist} --outbase ${studydir}/${subject}_${r} --outputformat mat >> ${cleanlog} 2>&1
+		python $FMRICLEANDIR/fmri_save_parcellated_timeseries.py --input ${scandir}/${scanfile}.nii --roifile ${roilist} --outbase ${studydir}/${subject}_${r} --outputformat mat >> ${cleanlog} 2>&1
 		
 		aws s3 sync ${studydir} ${s3studyroot}/${uploadprefix}${subject}${uploadsuffix}/ --exclude "*" --include "${subject}_${r}_*confound*" --include "${subject}_${r}_*ts.txt" --include "${subject}_${r}_*_ts.mat" --include "${subject}_${r}_outlier*" --include "${subject}_${r}_fmriclean_*"
 		
@@ -337,7 +364,7 @@ for r in ${ScanList}; do
 			for gsrarg in "" "--gsr"; do
 				filtname=${filtargname/@*/""}
 				filtarg=${filtargname/*@/""}
-				python $HOME/fmri_clean_parcellated_timeseries.py --inputpattern "${studydir}/${subject}_${r}_%s_ts.mat" --roilist ${roilist} --confoundfile ${studydir}/${subject}_${r}_fmriclean_confounds.mat $filtarg $gsrarg --outbase ${studydir}/${subject}_${r}_fmriclean_${filtname} ${skipvolarg} ${connarg} --outputformat mat --sequentialroi >> ${cleanlog} 2>&1
+				python $FMRICLEANDIR/fmri_clean_parcellated_timeseries.py --inputpattern "${studydir}/${subject}_${r}_%s_ts.mat" --roilist ${roilist} --confoundfile ${studydir}/${subject}_${r}_fmriclean_confounds.mat $filtarg $gsrarg --outbase ${studydir}/${subject}_${r}_fmriclean_${filtname} ${skipvolarg} ${connarg} --outputformat mat --sequentialroi >> ${cleanlog} 2>&1
 			done
 		done
 		aws s3 sync ${studydir} ${s3studyroot}/${uploadprefix}${subject}${uploadsuffix}/ --exclude "*" --include "${subject}_${r}_fmriclean_*_ts.txt" --include "${subject}_${r}_fmriclean_*_ts.mat" --include "${subject}_${r}_*FC*.mat" --include "${subject}_${r}_fmriclean_*.log"
@@ -364,7 +391,7 @@ if [ "${do_concat}" = "1" ]; then
 		for gsrarg in "" "--gsr"; do
 			filtname=${filtargname/@*/""}
 			filtarg=${filtargname/*@/""}
-			python $HOME/fmri_clean_parcellated_timeseries.py --inputpattern ${inputpattern_list} --roilist ${roilist} --confoundfile ${confoundfile_list} $filtarg $gsrarg --outbase ${studydir}/${subject}_concat_fmriclean_${filtname} ${skipvolarg} --outputformat mat --sequentialroi --concat ${connarg}  >> ${cleanlog} 2>&1
+			python $FMRICLEANDIR/fmri_clean_parcellated_timeseries.py --inputpattern ${inputpattern_list} --roilist ${roilist} --confoundfile ${confoundfile_list} $filtarg $gsrarg --outbase ${studydir}/${subject}_concat_fmriclean_${filtname} ${skipvolarg} --outputformat mat --sequentialroi --concat ${connarg}  >> ${cleanlog} 2>&1
 		done
 	done
 	
@@ -393,7 +420,7 @@ elif [ "${do_concat}" = "2" ]; then
 			for gsrarg in "" "--gsr"; do
 				filtname=${filtargname/@*/""}
 				filtarg=${filtargname/*@/""}
-				python $HOME/fmri_clean_parcellated_timeseries.py --inputpattern ${inputpattern_list} --roilist ${roilist} --confoundfile ${confoundfile_list} $filtarg $gsrarg --outbase ${studydir}/${subject}_concat${d}_fmriclean_${filtname} ${skipvolarg} --outputformat mat --sequentialroi --concat ${connarg}  >> ${cleanlog} 2>&1
+				python $FMRICLEANDIR/fmri_clean_parcellated_timeseries.py --inputpattern ${inputpattern_list} --roilist ${roilist} --confoundfile ${confoundfile_list} $filtarg $gsrarg --outbase ${studydir}/${subject}_concat${d}_fmriclean_${filtname} ${skipvolarg} --outputformat mat --sequentialroi --concat ${connarg}  >> ${cleanlog} 2>&1
 			done
 		done
 	
