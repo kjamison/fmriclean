@@ -14,6 +14,7 @@ parser.add_argument('--input',action='store',dest='inputvol')
 parser.add_argument('--mask',action='store',dest='maskfile')
 parser.add_argument('--roifile',action='append',dest='roifile',help='ROI atlas label volume. can be --roifile myname=myname_parc.nii.gz',nargs='*')
 parser.add_argument('--outbase',action='store',dest='outbase')
+parser.add_argument('--repetitiontime','-tr',action='store',dest='tr',help='TR in seconds (default=read from input)',type=float)
 parser.add_argument('--sequentialroi',action='store_true',dest='sequential',help='Output columns for ALL sequential ROI values from 1:max (otherwise only unique values in ROI volume)')
 parser.add_argument('--sequentialerrorsize',action='store',dest='sequentialerrorsize',type=int,default=1000,help='Throw error if using --sequential and largest ROI label is larger than this')
 parser.add_argument('--outputformat',action='store',dest='outputformat',choices=['mat','txt'],default='mat')
@@ -28,6 +29,8 @@ roifile=args.roifile
 outbase=args.outbase
 outputformat=args.outputformat
 do_seqroi=args.sequential
+input_tr=args.tr
+
 sequential_error_size=args.sequentialerrorsize
 verbose=args.verbose
 
@@ -54,6 +57,8 @@ print("Sequential ROI indexing: %s" % (do_seqroi))
 
 D=nib.load(inputvol)
 tr=D.header['pixdim'][4]
+if tr <=0 and input_tr > 0:
+    tr=input_tr
 numvols=D.shape[-1]
 
 if maskfile:

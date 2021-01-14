@@ -49,6 +49,8 @@ gmfile=None
 do_erode_wm=True
 do_erode_csf=True
 
+mask_threshold=0.5
+
 if hcpmnidir and hcpscanname:
     if inputvol is None:
         inputvol="%s/Results/%s/%s.nii.gz" % (hcpmnidir,hcpscanname,hcpscanname)
@@ -135,7 +137,7 @@ def normalize(x):
     
 def getmaskcomps(dataimg,maskimg,maskconfounds,ncomp,blocksize=200):
     #maskdata=dataimg.get_fdata(dtype=np.float32,caching="unchanged")[maskimg.get_fdata()>0].T
-    mask=maskimg.get_fdata()>0
+    mask=maskimg.get_fdata()>mask_threshold
     if ncomp==1:
         #when only returning the mean, we can compute this faster and with less memory by just computing mask mean as we loop
         maskmean=np.zeros((dataimg.shape[3],1),dtype=np.float32)
@@ -241,7 +243,7 @@ erosionbox=np.ones((erosionvoxels*2+1,erosionvoxels*2+1,erosionvoxels*2+1))>0
 if csffile:
     if do_erode_csf:
         csfimg=nib.load(csffile)
-        csfnew=binary_erosion(csfimg.get_fdata()>0,structure=erosionbox)
+        csfnew=binary_erosion(csfimg.get_fdata()>mask_threshold,structure=erosionbox)
         ecsfimg=nib.Nifti1Image(csfnew,affine=csfimg.affine,header=csfimg.header)
     else:
         ecsfimg=nib.load(csffile)
@@ -249,7 +251,7 @@ if csffile:
 if wmfile:
     if do_erode_wm:
         wmimg=nib.load(wmfile)
-        wmnew=binary_erosion(wmimg.get_fdata()>0,structure=erosionbox)
+        wmnew=binary_erosion(wmimg.get_fdata()>mask_threshold,structure=erosionbox)
         ewmimg=nib.Nifti1Image(wmnew,affine=csfimg.affine,header=csfimg.header)
     else:
         ewmimg=nib.load(wmfile)
