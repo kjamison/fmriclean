@@ -36,6 +36,7 @@ parser.add_argument('--repetitiontime','-tr',action='store',dest='tr',help='TR i
 parser.add_argument('--filterstrategy',action='store',dest='filterstrategy',choices=['connregbp','orth','parallel','none'],default='connregbp')
 parser.add_argument('--connmeasure',action='append',dest='connmeasure',choices=['none','correlation','partialcorrelation','precision','covariance'],nargs='*')
 parser.add_argument('--outputformat',action='store',dest='outputformat',choices=['mat','txt'],default='mat')
+parser.add_argument('--outputvolumeformat',action='store',dest='outputvolumeformat',choices=['same','auto','nii','nii.gz'],default='same')
 parser.add_argument('--gsr',action='store_true',dest='gsr')
 parser.add_argument('--nocompcor',action='store_true',dest='nocompcor')
 parser.add_argument('--nomotion',action='store_true',dest='nomotion')
@@ -62,6 +63,7 @@ skipvols=args.skipvols
 bpfmode=args.filterstrategy
 connmeasure=flatarglist(args.connmeasure)
 outputformat=args.outputformat
+outputvolumeformat=args.outputvolumeformat
 verbose=args.verbose
 do_gsr=args.gsr
 do_nocompcor=args.nocompcor
@@ -381,9 +383,11 @@ def save_timeseries(filename_noext,outputformat,output_dict, output_volume_info=
         outshape=list(Vimg_orig.shape[:3])
         if output_dict["ts"].ndim > 1:
             outshape+=[output_dict["ts"].shape[0]]
-        Vnew=np.zeros(outshape,dtype=Vimg_orig.get_data_dtype())
+        #output_dtype=Vimg_orig.get_data_dtype()
+        output_dtype=np.float32
+        Vnew=np.zeros(outshape,dtype=output_dtype)
         Vnew[output_volume_info['mask']]=output_dict["ts"].T
-        Vimg=nib.Nifti1Image(Vnew.astype(Vimg_orig.get_data_dtype()),affine=Vimg_orig.affine,header=Vimg_orig.header)
+        Vimg=nib.Nifti1Image(Vnew.astype(output_dtype),affine=Vimg_orig.affine,header=Vimg_orig.header)
         outfilename=filename_noext+"."+output_volume_info["extension"]
         shapestring="x".join([str(x) for x in Vimg.shape])
         nib.save(Vimg, outfilename)
@@ -544,6 +548,9 @@ for roiname in roiname_list:
         else:
             inputfile=inputitem
         Dt,roivals,roisizes,tr_input,vol_info = loadinput(inputfile)
+        if vol_info is not None and not outputvolumeformat in ["same","auto"]:
+            vol_info["extension"]=outputvolumeformat
+        
         print("Loaded input file: %s (%dx%d)" % (inputfile,Dt.shape[0],Dt.shape[1]))
         if tr_input:
             tr=tr_input

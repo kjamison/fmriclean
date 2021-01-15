@@ -21,16 +21,17 @@ def flatarglist(l):
         return []
     return flatlist([x.split(",") for x in flatlist(l)])
 
-parser=argparse.ArgumentParser(description='ALFF and fALFF after denoising')
+parser=argparse.ArgumentParser(description='ALFF and fALFF *after* denoising')
 
 parser.add_argument('--input',action='append',dest='inputvol',nargs='*')
 parser.add_argument('--confoundfile',action='append',dest='confoundfile',nargs='*')
 parser.add_argument('--outbase',action='append',dest='outbase',nargs='*')
 parser.add_argument('--skipvols',action='store',dest='skipvols',type=int,default=5)
-parser.add_argument('--lowfreq',action='store',dest='lowfreq',type=float) #,default=0.008)
-parser.add_argument('--highfreq',action='store',dest='highfreq',type=float)# ,default=0.09)
+parser.add_argument('--lffrange',action='store',dest='lffrange',type=float,nargs=2) #,default=0.008)
+parser.add_argument('--totalfreqrange',action='store',dest='totalfreqrange',type=float,nargs=2) #,default=0.008)
 parser.add_argument('--repetitiontime','-tr',action='store',dest='tr',help='TR in seconds',type=float)
 parser.add_argument('--outlierfile',action='append',dest='outlierfile',nargs='*')
+parser.add_argument('--outputvolumeformat',action='store',dest='outputvolumeformat',choices=['same','auto','nii','nii.gz'],default='same')
 parser.add_argument('--verbose',action='store_true',dest='verbose')
 
 args=parser.parse_args()
@@ -41,12 +42,12 @@ outlierfile_list=flatarglist(args.outlierfile)
 confoundfile_list=flatarglist(args.confoundfile)
 verbose=args.verbose
 tr=args.tr
+outputvolumeformat=args.outputvolumeformat
+lffrange=np.sort(args.lffrange)
 
 bpf=[-np.inf,np.inf]
-if args.lowfreq:
-    bpf[0]=args.lowfreq
-if args.highfreq:
-    bpf[1]=args.highfreq
+if args.totalfreqrange:
+    bpf=np.sort(args.totalfreqrange)
 
 do_filter_rolloff=True
 
@@ -56,7 +57,8 @@ num_inputs=len(input_list)
 
 
 print("Input time series: %s" % (inputvol_list))
-print("Filter band-pass Hz: [%s,%s]" % (bpf[0],bpf[1]))
+print("Low-Frequency Fluctuation range Hz: [%s,%s]" % (lffrange[0],lffrange[1]))
+print("Total frequency range Hz: [%s,%s]" % (bpf[0],bpf[1]))
 print("Ignore first N volumes: %s" % (skipvols))
 print("Confound file: %s" % (confoundfile_list))
 print("Outlier timepoint file: %s" % (outlierfile_list))
@@ -170,9 +172,11 @@ def save_timeseries(filename_noext,outputformat,output_dict, output_volume_info=
         outshape=list(Vimg_orig.shape[:3])
         if output_dict["ts"].ndim > 1:
             outshape+=[output_dict["ts"].shape[0]]
-        Vnew=np.zeros(outshape,dtype=Vimg_orig.get_data_dtype())
+        #output_dtype=Vimg_orig.get_data_dtype()
+        output_dtype=np.float32
+        Vnew=np.zeros(outshape,dtype=output_dtype)
         Vnew[output_volume_info['mask']]=output_dict["ts"].T
-        Vimg=nib.Nifti1Image(Vnew.astype(Vimg_orig.get_data_dtype()),affine=Vimg_orig.affine,header=Vimg_orig.header)
+        Vimg=nib.Nifti1Image(Vnew.astype(output_dtype),affine=Vimg_orig.affine,header=Vimg_orig.header)
         outfilename=filename_noext+"."+output_volume_info["extension"]
         shapestring="x".join([str(x) for x in Vimg.shape])
         nib.save(Vimg, outfilename)
@@ -253,6 +257,9 @@ for inputidx,inputfile in enumerate(input_list):
     confounds_dict=confounds_list[inputidx]
 
     Dt,roivals,roisizes,tr_input,vol_info,input_extension = loadinput(inputfile)
+    if vol_info is not None and not outputvolumeformat in ["same","auto"]:
+        vol_info["extension"]=outputvolumeformat
+    
     print("Loaded input file: %s (%dx%d)" % (inputfile,Dt.shape[0],Dt.shape[1]))
     if tr_input:
         tr=tr_input
@@ -268,7 +275,7 @@ for inputidx,inputfile in enumerate(input_list):
     outliermat=vec2columns(outliermat)
     
     numvols_not_outliers=np.sum(np.sum(np.abs(outliermat),axis=1)==0,axis=0)
-    print("Non-outlier volumes:", numvols_not_outliers)
+    print("Non-outlier volumes: ", numvols_not_outliers)
     
     if do_filter_rolloff:
         filter_edge_rolloff_size=int(36/tr/2)*2+1 #51 for tr=0.72
@@ -280,8 +287,8 @@ for inputidx,inputfile in enumerate(input_list):
     F, freq = nanfft(Dt,tr,outliermat=outliermat,inverse=False)
     F=2*np.abs(F)/numvols_not_outliers
     
-    ts_alff=np.mean(F[(freq>=bpf[0]) & (freq<=bpf[1]),:],axis=0)
-    ts_falff =ts_alff / np.mean(F[freq>=bpf[0],:],axis=0)
+    ts_alff=np.mean(F[(freq>=lffrange[0]) & (freq<=lffrange[1]),:],axis=0)
+    ts_falff =ts_alff / np.mean(F[(freq>=bpf[0]) & (freq<=bpf[1]),:],axis=0)
     
     savedfilename, shapestring = save_timeseries(outbase_list[inputidx]+"_alff", input_extension, {"ts":ts_alff,"roi_labels":roivals,"roi_sizes":roisizes,"repetition_time":tr}, vol_info)
     print("Saved %s (%s)" % (savedfilename,shapestring))
