@@ -18,20 +18,20 @@ for scan in scan1 scan2; do
     outputbase=outputdir/mysubj_${scan}
 
 
-    fmri_outlier_detection.py --input ${scanfile} --mask ${scandir}/brainmask_fs.2.nii.gz --motionparam ${movfile} --motionparamtype ${movfiletype} --connstandard --output ${outputbase}_outliers.txt --outputparams ${outputbase}_outlier_parameters.mat
+    python fmri_outlier_detection.py --input ${scanfile} --mask ${scandir}/brainmask_fs.2.nii.gz --motionparam ${movfile} --motionparamtype ${movfiletype} --connstandard --output ${outputbase}_outliers.txt --outputparams ${outputbase}_outlier_parameters.mat
 
-    fmri_save_confounds.py --input ${scanfile} --motionparam ${movfile} --motionparamtype ${movfiletype} --gmmask ${gmfile} --wmmask ${wmfile} --csfmask ${csffile} --erosionvoxels ${erosionvoxels} --outlierfile ${outputbase}_outliers.txt --skipvols ${skipvols} --output ${outputbase}_fmriclean_confounds.mat
+    python fmri_save_confounds.py --input ${scanfile} --motionparam ${movfile} --motionparamtype ${movfiletype} --gmmask ${gmfile} --wmmask ${wmfile} --csfmask ${csffile} --erosionvoxels ${erosionvoxels} --outlierfile ${outputbase}_outliers.txt --skipvols ${skipvols} --output ${outputbase}_fmriclean_confounds.mat
 
-    fmri_save_parcellated_timeseries.py --input ${scanfile} --roifile ${roifile} --outbase ${outputbase}_${roiname} --outputformat mat
+    python fmri_save_parcellated_timeseries.py --input ${scanfile} --roifile ${roifile} --outbase ${outputbase}_${roiname} --outputformat mat
 
-    fmri_clean_parcellated_timeseries.py --input "${outputbase}_${roiname}_ts.mat" --confoundfile ${outputbase}_fmriclean_confounds.mat $filtarg $gsrarg --outbase ${outputbase}_fmriclean_${filtname} --skipvols ${skipvols} ${connarg} --outputformat mat --sequentialroi
+    python fmri_clean_parcellated_timeseries.py --input "${outputbase}_${roiname}_ts.mat" --confoundfile ${outputbase}_fmriclean_confounds.mat $filtarg $gsrarg --outbase ${outputbase}_fmriclean_${filtname} --skipvols ${skipvols} ${connarg} --outputformat mat --sequentialroi
 done
 
 # for concatenation
 concatbase=outputdir/mysubj
 inputlist="${concatbase}_scan1_${roiname}_ts.mat ${concatbase}_scan2_${roiname}_ts.mat"
 confoundlist="${concatbase}_scan1_fmriclean_confounds.mat ${concatbase}_scan2_fmriclean_confounds.mat"
-fmri_clean_parcellated_timeseries.py --input ${inputlist} --confoundfile ${confoundlist} $filtarg $gsrarg --outbase ${concatbase}_concat_fmriclean_${filtname} --skipvols ${skipvols} --outputformat mat --sequentialroi --concat ${connarg}
+python fmri_clean_parcellated_timeseries.py --input ${inputlist} --confoundfile ${confoundlist} $filtarg $gsrarg --outbase ${concatbase}_concat_fmriclean_${filtname} --skipvols ${skipvols} --outputformat mat --sequentialroi --concat ${connarg}
 
 
 # for alff and falff, assumes fmri_outlier_detection.py and fmri_save_confounds.py have been run
@@ -44,10 +44,10 @@ alff_lowfreq="0.008"
 alff_highfreq="0.09"
 
 #output will be ${outputbase}_fmriclean${filtname}${gsrname}_tsclean.nii.gz
-fmri_clean_parcellated_timeseries.py --input ${scanfile} --confoundfile ${outputbase}_fmriclean_confounds.mat $filtarg $gsrarg --outbase ${outputbase}_fmriclean --skipvols ${skipvols} --connmeasure none --savets
+python fmri_clean_parcellated_timeseries.py --input ${scanfile} --confoundfile ${outputbase}_fmriclean_confounds.mat $gsrarg --outbase ${outputbase}_fmriclean --skipvols ${skipvols} --connmeasure none --savets
 	
-fmri_alff.py --input ${outputbase}_fmriclean${filtname}${gsrname}_tsclean.nii.gz --confoundfile ${outputbase}_fmriclean_confounds.mat --outbase ${outputbase}_fmriclean${filtname}${gsrname}_tsclean --lowfreq ${alff_lowfreq} --highfreq ${alff_highfreq}
-		
+python fmri_alff.py --input ${outputbase}_fmriclean${filtname}${gsrname}_tsclean.nii.gz --confoundfile ${outputbase}_fmriclean_confounds.mat --outbase ${outputbase}_fmriclean${filtname}${gsrname}_tsclean --lffrange ${alff_lowfreq} ${alff_highfreq} --totalfreqrange 0 inf
+
 #final output will be:
 #${outputbase}_fmriclean${filtname}${gsrname}_tsclean_alff.nii.gz
 #${outputbase}_fmriclean${filtname}${gsrname}_tsclean_falff.nii.gz

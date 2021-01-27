@@ -9,10 +9,8 @@ import tempfile
 import os
 import glob
 
-def flatlist(l):
-    if l is None:
-        return []
-    return [x for y in l for x in y]
+from utils import flatlist
+
 
 def main(argv):
     parser=argparse.ArgumentParser()
