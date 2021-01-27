@@ -317,7 +317,7 @@ def fmri_clean_parcellated_timeseries(argv):
     if len(outlierfile_list)==num_inputs:
         for inputidx,outlierfile in enumerate(outlierfile_list):
             outliermat=np.loadtxt(outlierfile)>0
-            confounds_list[inputidx]["outliermat"]
+            confounds_list[inputidx]["outliermat"]=outliermat
 
     ##############
     # main loop
