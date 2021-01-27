@@ -15,7 +15,7 @@ from utils import *
 
 def argument_parse(argv):
     parser=argparse.ArgumentParser(description='fMRI Denoising after parcellation')
-
+    
     parser.add_argument('--input',action='append',dest='inputvol',nargs='*')
     parser.add_argument('--confoundfile',action='append',dest='confoundfile',nargs='*')
     parser.add_argument('--outbase',action='append',dest='outbase',nargs='*')
@@ -43,7 +43,7 @@ def argument_parse(argv):
     parser.add_argument('--sequentialroierrorsize',action='store',dest='sequentialroierrorsize',type=int,default=1000,help='Throw error if using --sequential and largest ROI label is larger than this')
     parser.add_argument('--concat',action='store_true',dest='concat',help='Concatenate time series when multiple --input or --inputpattern are given (need multiple --confound in this case as well)')
     parser.add_argument('--verbose',action='store_true',dest='verbose')
-
+    
     return parser.parse_args(argv)
 
 def save_connmatrix(filename_noext,outputformat,output_dict):
@@ -82,7 +82,7 @@ def compute_connmatrix(ts,conntype,input_shrinkage="lw"):
     E=nilearn.connectome.ConnectivityMeasure(kind=conntype, vectorize=False, discard_diagonal=False, cov_estimator=covest)
     #C=E.fit_transform([Dt_clean[skipvols:,:]])[0]
     C=E.fit_transform([ts])[0]
-
+    
     shrinkage=np.nan
     covest_class=E.cov_estimator.__class__.__name__
     if covest_class == "LedoitWolf":
@@ -91,7 +91,7 @@ def compute_connmatrix(ts,conntype,input_shrinkage="lw"):
         shrinkage=E.cov_estimator_.shrinkage
     elif covest_class == "EmpiricalCovariance":
         shrinkage=0
-
+    
     return C, shrinkage, covest_class
     
 #########################################################
@@ -122,23 +122,23 @@ def fmri_clean_parcellated_timeseries(argv):
     sequential_roi_error_size=args.sequentialroierrorsize
     do_concat=args.concat
     input_shrinkage=args.shrinkage
-
+    
     if not connmeasure:
         connmeasure=['correlation']
-
+    
     connmeasure=["partial correlation" if x=="partialcorrelation" else x for x in connmeasure]
     connmeasure=["partial correlation" if x=="partial" else x for x in connmeasure]
     connmeasure=list(set(connmeasure))
     connmeasure.sort() #note: list(set(...)) scrambles the order
-
+    
     if 'none' in connmeasure:
         connmeasure=['none']
-
+    
     connmeasure_shortname={"correlation":"corr", "partial correlation":"pcorr", "precision": "prec", "tangent":"tan", "covariance":"cov"}
-
+    
     ########
     is_pattern = len(inputpattern_list)>0 and len(roilist)>0
-
+    
     if is_pattern:
         input_list=inputpattern_list
         roiname_list=[]
@@ -158,18 +158,18 @@ def fmri_clean_parcellated_timeseries(argv):
         else:
             roiname=""
         roiname_list=[roiname]
-
+    
     num_inputs=len(input_list)
-
+    
     ###########
-
+    
     if do_concat and len(outbase_list)!=1:
         print("Only 1 outputbase should be provided when using --concat")
         sys.exit(1)
     elif not do_concat and len(outbase_list)!=len(input_list):
         print("Must have 1 outputbase entry for each input entry")
         sys.exit(1)
-
+    
     if input_shrinkage.lower() == "lw":
         pass
     elif input_shrinkage.isnumeric():
@@ -177,9 +177,9 @@ def fmri_clean_parcellated_timeseries(argv):
     else:
         print("Unknown value for shrinkage: %s" % (input_shrinkage))
         sys.exit(1)
-
+    
     ###########
-
+    
     hrf_orig=None
     hrf_orig_tr=None
     if args.hrffile:
@@ -190,7 +190,7 @@ def fmri_clean_parcellated_timeseries(argv):
         #import nipy.modalities.fmri.hrf
         #hrf=nipy.modalities.fmri.hrf.spmt(np.arange(numvols)*tr)[:,None]
         #np.savetxt("hrf_%d.txt" % (numvols),hrf,fmt="%.18f");
-
+        
         #this was generated from tr=0.8sec
         hrf_orig = np.array([0,0.00147351,0.0211715,0.0722364,0.136776,0.18755,0.209678,0.20356,0.178095,0.143632,0.10812,0.0761595,0.04961,
             0.0286445,0.0126525,0.000811689,-0.00764106,-0.0133351,-0.0167838,-0.0184269,-0.0186623,-0.0178584,-0.0163506,-0.0144316,
@@ -212,14 +212,14 @@ def fmri_clean_parcellated_timeseries(argv):
             bpf[0]=args.lowfreq
         if args.highfreq:
             bpf[1]=args.highfreq
-
+    
     if bpf[0]<=0 and not np.isfinite(bpf[1]):
         bpfmode='none'
     if bpfmode=='none':
         bpf=[-np.inf,np.inf]
-
+    
     do_filter_rolloff=True
-
+    
     print("Input time series: %s" % (inputvol_list))
     print("Input file pattern: %s" % (inputpattern_list))
     print("ROI list: %s" % (roilist))
@@ -238,11 +238,11 @@ def fmri_clean_parcellated_timeseries(argv):
     print("Sequential ROI indexing: %s" % (do_seqroi))
     print("Concatenate time series: %s" % (do_concat))
     print("Covariance shrinkage: %s" % (input_shrinkage))
-
+    
     #############
     # read in confounds (from a confoundfile and/or specified motionparam and outlier arguments)
     confounds_list=[{"gmreg":None,"wmreg":None,"csfreg":None,"mp":None,"resteffect":None,"outliermat":None} for i in range(num_inputs)]
-
+    
     #read in --confoundfile inputs for each input time series (if provided)
     if len(confoundfile_list)==num_inputs:
         for inputidx,confoundfile in enumerate(confoundfile_list):
@@ -337,18 +337,18 @@ def fmri_clean_parcellated_timeseries(argv):
             print("Loaded input file: %s (%dx%d)" % (inputfile,Dt.shape[0],Dt.shape[1]))
             if tr_input:
                 tr=tr_input
-
+            
             numvols=Dt.shape[0]
-    
+            
             did_print_nuisance_size=False
-
+            
             outliermat=np.zeros((numvols,1))
             resteffect=np.zeros((numvols,0))
             gmreg=np.zeros((numvols,0))
             wmreg=np.zeros((numvols,0))
             csfreg=np.zeros((numvols,0))
             mp=np.zeros((numvols,0))
-        
+            
             if confounds_dict["gmreg"] is not None:
                 gmreg=confounds_dict["gmreg"]
             if confounds_dict["wmreg"] is not None:
@@ -359,7 +359,7 @@ def fmri_clean_parcellated_timeseries(argv):
                 mp=confounds_dict["mp"]
             if confounds_dict["outliermat"] is not None:
                 outliermat=confounds_dict["outliermat"]
-        
+            
             if resteffect.shape[-1]==0:
                 if hrf_orig_tr:
                     hrf_interp=scipy.interpolate.interp1d(hrf_orig_tr*np.arange(len(hrf_orig)),hrf_orig,axis=0,kind="cubic",fill_value=0,bounds_error=False)
@@ -369,64 +369,64 @@ def fmri_clean_parcellated_timeseries(argv):
                 elif hrf.shape[0] > numvols:
                     hrf=hrf[:numvols,:]
                 resteffect=np.convolve(np.ones(numvols),hrf[:,0])[:numvols,None]
-
+            
             #might be 1d format, so expand it then collapse, mark skipvols, then re-expand
             outliermat=np.sum(vec2columns(outliermat)!=0,axis=1)[:,None]
             outliermat[:skipvols,:]=True
             outliermat=vec2columns(outliermat)
-    
+            
             outlierflat=np.sum(outliermat!=0,axis=1)
-    
+            
             onesmat=np.ones(mp.shape[0])[:,None]
             detrendmat=np.arange(mp.shape[0])[:,None]
-
+            
             ########################################
             if not do_gsr:
                 gmreg=np.zeros((numvols,0))
-    
+            
             if do_nocompcor:
                 wmreg=np.zeros((numvols,0))
                 csfreg=np.zeros((numvols,0))
-        
+            
             if do_nomotion:
                 mp=np.zeros((numvols,0))
-        
+            
             confounds=np.hstack([onesmat,addderiv(gmreg),wmreg,csfreg,addsquare(addderiv(mp)),addderiv(resteffect),outliermat,detrendmat])
             confounds_to_filter=np.hstack([addderiv(gmreg),wmreg,csfreg,addsquare(addderiv(mp)),addderiv(resteffect)])
-        
+            
             confounds_orig=confounds;
-        
+            
             if do_filter_rolloff:
                 filter_edge_rolloff_size=int(36/tr/2)*2+1 #51 for tr=0.72
                 filter_edge_rolloff_std=3.6/tr #5 for tr=0.72
                 filter_edge_rolloff=scipy.signal.gaussian(filter_edge_rolloff_size,filter_edge_rolloff_std)
             else:
                 filter_edge_rolloff=None
-
-        
+            
+            
             if not did_print_nuisance_size:
                 print("Total nuisance regressors: %d" %  (confounds.shape[1]))
                 did_print_nuisance_size=True
             
-        
+            
             if bpfmode=="parallel":
                 #nilearn filters confounds, filters signals, and then denoises filtered(signals) with filtered(confounds)
                 #but how does this handle outlier regressors? filtering is going to blur those out in weird ways
                 #raise Exception("seq filtering hasn't been tested AT ALL yet.")
                 Dt=dctfilt(Dt,tr,bpf,filter_edge_rolloff,outliermat=outlierflat)
                 confounds=dctfilt(confounds_to_filter,tr,bpf,filter_edge_rolloff,outliermat=outlierflat)
-        
+                
                 #remove confound time series that are all zeros after filtering
                 confounds=confounds[:,np.max(abs(confounds),axis=0)>(2*np.finfo(confounds.dtype).eps)]
                 confounds=np.hstack([onesmat,confounds,outliermat,detrendmat])
                 #savemat(outbase_list[inputidx]+"_confounds_filtered.mat",{"confounds_filtered":confounds,"confounds_orig":confounds_orig})
                 print("Total nuisance regressors after %s filter: %d" % (bpfmode,confounds.shape[1]))
-        
+            
             if bpfmode=="orth":
                 Dt_clean=nilearn.signal.clean(Dt, confounds=confounds, standardize=False, t_r=tr, detrend=False,low_pass=bpf[1], high_pass=bpf[0])
             else:
                 Dt_clean=nilearn.signal.clean(Dt, confounds=confounds, standardize=False, t_r=tr, detrend=False)
-
+            
             if bpfmode=="connregbp":
                 #Dt=nilearn.signal.clean(Dt.copy(), detrend=False, standardize=False, low_pass=bpf[1], high_pass=bpf[0], t_r=tr)
                 #what should we do about outliers when filtering?
@@ -438,14 +438,14 @@ def fmri_clean_parcellated_timeseries(argv):
                 #Important: We do get some ringing at edges of outlier segments
                 #   * option 3 is always better than option 2 for ringing
                 #   * If we do this, should we do some kind of post-filtering global signal regression to minimize global ringing?
-
+                
                 #confounds_clean=dctfilt(confounds,tr,bpf)
                 #savemat(outbase+"_testconfounds_clean.mat",{"confounds":confounds,"confounds_clean":confounds_clean})
-        
+                
                 Dt_clean=dctfilt(Dt_clean, tr, bpf,filter_edge_rolloff,outliermat=outlierflat) #, scipy.signal.gaussian(21,5))
                 #Dt_clean=fftfilt(naninterp(Dt_clean,outliermat=outlierflat), tr, bpf, scipy.signal.gaussian(21,5))
                 #Dt_clean=fftfilt(Dt_clean, tr, bpf)
-
+            
             if do_seqroi:
                 #make full 
                 maxroi=np.max(roivals).astype(np.int)
@@ -454,33 +454,33 @@ def fmri_clean_parcellated_timeseries(argv):
                 roivals_seq=np.arange(1,maxroi+1)
                 roisizes_seq=np.zeros(maxroi)
                 roisizes_seq[roivals.astype(np.int)-1]=roisizes
-        
+                
                 Dt_clean_seq=np.zeros((Dt_clean.shape[0],maxroi),dtype=Dt_clean.dtype)
                 Dt_clean_seq[:,roivals.astype(np.int)-1]=Dt_clean
-        
+                
                 roivals=roivals_seq
                 roisizes=roisizes_seq
                 Dt_clean=Dt_clean_seq.copy()
             else:
                 pass
-
+            
             if do_gsr:
                 gsrsuffix="_gsr"
             else:
                 gsrsuffix=""
-
+            
             if roiname:
                 roisuffix="_"+roiname
             else:
                 roisuffix=""
-    
+            
             if do_savets and len(outbase_list)==num_inputs:
                 savedfilename, shapestring = save_timeseries(outbase_list[inputidx]+roisuffix+gsrsuffix+"_tsclean", outputformat, {"ts":Dt_clean,"roi_labels":roivals, "roi_sizes":roisizes,"repetition_time":tr}, vol_info)
                 print("Saved %s (%s)" % (savedfilename,shapestring))
-    
+            
             #note: skipvols is already included in outlierflat
             Dt_clean_outlierfree=normalize(Dt_clean[outlierflat==0,:])
-        
+            
             if do_concat:
                 outlier_free_data_list+=[Dt_clean_outlierfree]
             else:
@@ -491,19 +491,19 @@ def fmri_clean_parcellated_timeseries(argv):
                         print("Connectivity matrices for voxelwise input is currently disabled!")
                         continue
                     C,shrinkage,covest_class = compute_connmatrix(Dt_clean_outlierfree, cm, input_shrinkage)
-        
+                    
                     Cdict={"C":C,"roi_labels":roivals,"roi_sizes":roisizes,"shrinkage":shrinkage,'cov_estimator':covest_class}
                     savedfilename, shapestring = save_connmatrix(outbase_list[inputidx]+roisuffix+gsrsuffix+"_FC%s" % (connmeasure_shortname[cm]),outputformat,Cdict)
                     print("Saved %s (%s)" % (savedfilename,shapestring))
-
+        
         if not do_concat:
             continue
-    
+        
         if do_gsr:
             gsrsuffix="_gsr"
         else:
             gsrsuffix=""
-
+        
         if roiname:
             roisuffix="_"+roiname
         else:
@@ -511,7 +511,7 @@ def fmri_clean_parcellated_timeseries(argv):
         
         #concatenate multiple scans 
         Dt_clean_outlierfree=np.vstack(outlier_free_data_list)
-    
+        
         for cm in connmeasure:
             if cm == 'none':
                 continue
@@ -519,7 +519,7 @@ def fmri_clean_parcellated_timeseries(argv):
                 print("Connectivity matrices for voxelwise input is currently disabled!")
                 continue
             C,shrinkage,covest_class = compute_connmatrix(Dt_clean_outlierfree, cm, input_shrinkage)
-        
+            
             Cdict={"C":C,"roi_labels":roivals,"roi_sizes":roisizes,"shrinkage":shrinkage,'cov_estimator':covest_class}
             savedfilename, shapestring = save_connmatrix(outbase_list[0]+roisuffix+gsrsuffix+"_FC%s" % (connmeasure_shortname[cm]),outputformat,Cdict)
             print("Saved %s (%s)" % (savedfilename,shapestring))
