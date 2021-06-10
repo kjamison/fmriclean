@@ -119,11 +119,11 @@ def fmri_save_confounds(argv):
         hrffile=args.hrffile
 
 
-    if csffile.upper() == 'NONE':
+    if csffile is not None and csffile.upper() == 'NONE':
         csffile=None
-    if wmfile.upper() == 'NONE':
+    if wmfile is not None and wmfile.upper() == 'NONE':
         wmfile=None
-    if gmfile.upper() == 'NONE':
+    if gmfile is not None and gmfile.upper() == 'NONE':
         gmfile=None
 
     print("Input time series: %s" % (inputvol))
@@ -249,6 +249,14 @@ def fmri_save_confounds(argv):
     wmreg=np.zeros((numvols,0))
     csfreg=np.zeros((numvols,0))
 
+    #how many nuisance regressors for each tissue
+    num_csfreg=5
+    num_wmreg=5
+    
+    #minimum number of voxels per nuisance regressor (eg: must have at least 10 CSF voxels to extract 5 regressors)
+    #this is just a mimimal guess to avoid error
+    min_reg_voxel_factor=2
+    
     gmreg_names=[]
     wmreg_names=[]
     csfreg_names=[]
@@ -259,14 +267,22 @@ def fmri_save_confounds(argv):
         gmreg=getmaskcomps(D,gmimg,confounds1,1,mask_threshold=mask_threshold)
         gmreg_names=["GM.%d" % (x) for x in range(gmreg.shape[1])]
     if ewmimg:
+        ewmimg_voxelcount=(ewmimg.get_fdata().flatten()>=mask_threshold).sum()
+        if(ewmimg_voxelcount<(min_reg_voxel_factor*num_wmreg)):
+            print("Eroded WM mask has %d voxels. At least %d needed to extract regressors." % (ewmimg_voxelcount,(min_reg_voxel_factor*num_wmreg)))
+            sys.exit(1)
         if verbose:
-            print("Compute eroded WM regressors")
-        wmreg=getmaskcomps(D,ewmimg,confounds1,5,mask_threshold=mask_threshold)
+            print("Compute eroded WM regressors (%d voxels)" % (ewmimg_voxelcount))
+        wmreg=getmaskcomps(D,ewmimg,confounds1,num_wmreg,mask_threshold=mask_threshold)
         wmreg_names=["WM.%d" % (x) for x in range(wmreg.shape[1])]
     if ecsfimg:
+        ecsfimg_voxelcount=(ecsfimg.get_fdata().flatten()>=mask_threshold).sum()
+        if(ecsfimg_voxelcount<(min_reg_voxel_factor*num_csfreg)):
+            print("Eroded CSF mask has %d voxels. At least %d needed to extract regressors." % (ecsfimg_voxelcount,(min_reg_voxel_factor*num_csfreg)))
+            sys.exit(1)
         if verbose:
-            print("Compute eroded CSF regressors")
-        csfreg=getmaskcomps(D,ecsfimg,confounds1,5,mask_threshold=mask_threshold)
+            print("Compute eroded CSF regressors (%d voxels)" % (ecsfimg_voxelcount))
+        csfreg=getmaskcomps(D,ecsfimg,confounds1,num_csfreg,mask_threshold=mask_threshold)
         csfreg_names=["CSF.%d" % (x) for x in range(csfreg.shape[1])]
 
     
