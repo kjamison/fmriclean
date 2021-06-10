@@ -218,7 +218,7 @@ def fmri_save_confounds(argv):
         if do_erode_wm:
             wmimg=nib.load(wmfile)
             wmnew=binary_erosion(wmimg.get_fdata()>mask_threshold,structure=erosionbox)
-            ewmimg=nib.Nifti1Image(wmnew,affine=csfimg.affine,header=csfimg.header)
+            ewmimg=nib.Nifti1Image(wmnew,affine=wmimg.affine,header=wmimg.header)
         else:
             ewmimg=nib.load(wmfile)
 
