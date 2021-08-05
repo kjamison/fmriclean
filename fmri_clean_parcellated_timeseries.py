@@ -423,12 +423,27 @@ def fmri_clean_parcellated_timeseries(argv):
                 print("Total nuisance regressors after %s filter: %d" % (bpfmode,confounds.shape[1]))
             
             if bpfmode=="orth":
-                Dt_clean=nilearn.signal.clean(Dt, confounds=confounds, standardize=False, t_r=tr, detrend=False,low_pass=bpf[1], high_pass=bpf[0])
+                #for orth, filter simultaneously with denoising
+                cleanarg_lp=bpf[1]
+                cleanarg_hp=bpf[0]
             else:
-                Dt_clean=nilearn.signal.clean(Dt, confounds=confounds, standardize=False, t_r=tr, detrend=False)
+                #for parallel, filter BEFORE denoising. For connregbp filter AFTER denoising
+                cleanarg_lp=None
+                cleanarg_hp=None
+            
+            try:
+                #for nilearn >= 0.7.1 (3/2021), need to use standardize_confounds=False to avoid constant regressor terms being zerod out
+                Dt_clean=nilearn.signal.clean(Dt, confounds=confounds, standardize=False, standardize_confounds=False, t_r=tr, detrend=False,low_pass=cleanarg_lp, high_pass=cleanarg_hp)
+            except TypeError as e:
+                print("* TypeError in nilearn.signal.clean. Might be nilearn version <0.7.1, so trying again without standardize_confounds argument:\n* ",e)
+                #if this fails, it might be nilearn <= 0.7.0, which doesn't have standardize_confounds (uses same as "standardize")
+                # so try again without that argument
+                Dt_clean=nilearn.signal.clean(Dt, confounds=confounds, standardize=False, t_r=tr, detrend=False,low_pass=cleanarg_lp, high_pass=cleanarg_hp)
+            
+            savemat("testconfounds.mat",{"confounds":confounds},format='5',do_compression=True)
             
             if bpfmode=="connregbp":
-                #Dt=nilearn.signal.clean(Dt.copy(), detrend=False, standardize=False, low_pass=bpf[1], high_pass=bpf[0], t_r=tr)
+                #Dt=nilearn.signal.clean(Dt.copy(), detrend=False, standardize=False, standardize_confounds=False, low_pass=bpf[1], high_pass=bpf[0], t_r=tr)
                 #what should we do about outliers when filtering?
                 #the outlier regressors just set those timepoints to 0
                 #option 1: just filter it as-is with outliers set to 0
