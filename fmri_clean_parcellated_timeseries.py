@@ -440,8 +440,6 @@ def fmri_clean_parcellated_timeseries(argv):
                 # so try again without that argument
                 Dt_clean=nilearn.signal.clean(Dt, confounds=confounds, standardize=False, t_r=tr, detrend=False,low_pass=cleanarg_lp, high_pass=cleanarg_hp)
             
-            savemat("testconfounds.mat",{"confounds":confounds},format='5',do_compression=True)
-            
             if bpfmode=="connregbp":
                 #Dt=nilearn.signal.clean(Dt.copy(), detrend=False, standardize=False, standardize_confounds=False, low_pass=bpf[1], high_pass=bpf[0], t_r=tr)
                 #what should we do about outliers when filtering?
