@@ -149,8 +149,10 @@ def fmri_alff(argv):
         F, freq = nanfft(Dt,tr,outliermat=outliermat,inverse=False)
         F=2*np.abs(F)/numvols_not_outliers
     
+        #note: falff should be sum(lff)/sum(total) to be fractional
+        Nlff=sum((freq>=lffrange[0]) & (freq<=lffrange[1]))
         ts_alff=np.mean(F[(freq>=lffrange[0]) & (freq<=lffrange[1]),:],axis=0)
-        ts_falff =ts_alff / np.mean(F[(freq>=bpf[0]) & (freq<=bpf[1]),:],axis=0)
+        ts_falff =ts_alff*Nlff / np.sum(F[(freq>=bpf[0]) & (freq<=bpf[1]),:],axis=0)
     
         savedfilename, shapestring = save_timeseries(outbase_list[inputidx]+"_alff", input_extension, {"ts":ts_alff,"roi_labels":roivals,"roi_sizes":roisizes,"repetition_time":tr}, vol_info)
         print("Saved %s (%s)" % (savedfilename,shapestring))
