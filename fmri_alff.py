@@ -78,34 +78,9 @@ def fmri_alff(argv):
                     sys.exit(1)
                 confoundnames=line.strip().split("#")[-1].split()
                 fid.close()
-        
-            gmidx=[i for i,x in enumerate(confoundnames) if x.startswith("GM.")]
-            wmidx=[i for i,x in enumerate(confoundnames) if x.startswith("WM.")]
-            csfidx=[i for i,x in enumerate(confoundnames) if x.startswith("CSF.")]
-            mpidx=[i for i,x in enumerate(confoundnames) if x.startswith("motion.")]
-            restidx=[i for i,x in enumerate(confoundnames) if x.startswith("rest")]
+            
             outlieridx=[i for i,x in enumerate(confoundnames) if x.startswith("outlier.")]
-        
-            #outliermat=np.zeros((numvols,1))
-            #resteffect=np.zeros((numvols,0))
-            #gmreg=np.zeros((numvols,0))
-            #wmreg=np.zeros((numvols,0))
-            #csfreg=np.zeros((numvols,0))
-            #mp=np.zeros((numvols,0))
-        
-            if len(gmidx)>0:
-                confounds_list[inputidx]["gmreg"]=confoundmat[:,gmidx]
-            if len(wmidx)>0:
-                confounds_list[inputidx]["wmreg"]=confoundmat[:,wmidx]
-            if len(csfidx)>0:
-                confounds_list[inputidx]["csfreg"]=confoundmat[:,csfidx]
-            if len(mpidx)>0:
-                mp=confoundmat[:,mpidx]
-                if mp.shape[1]>6:
-                    mp=mp[:,:6]
-                confounds_list[inputidx]["mp"]=mp
-            if len(restidx)>0:
-                confounds_list[inputidx]["resteffect"]=confoundmat[:,restidx[0]][:,None]
+            
             if len(outlieridx)>0:
                 confounds_list[inputidx]["outliermat"]=confoundmat[:,outlieridx]
             

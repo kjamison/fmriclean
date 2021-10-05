@@ -2,7 +2,7 @@ import numpy as np
 import nibabel as nib
 from scipy.io import loadmat,savemat
 import scipy.signal, scipy.interpolate
-
+import os.path
 
 def flatlist(l):
     if l is None:
@@ -151,7 +151,19 @@ def dctfilt(S,tr,filt,filter_edge_rolloff=None,outliermat=None):
 
     return Sfilt
 
-
+def filename_split_extension(filepath):
+    filedir,filename=os.path.split(filepath)
+    if "." in filename:
+        if filename.lower().endswith(".gz"):
+            extension=".".join(filename.split(".")[-2:])
+        else:
+            extension=filename.split(".")[-1]
+        filebase=os.path.join(filedir,filename[:-len(extension)-1])
+    else:
+        extension=""
+        filebase=filepath
+    return filebase,extension
+    
 def load_input(filename):
     tr=None
     volinfo=None
@@ -175,7 +187,8 @@ def load_input(filename):
             
         Vimg=nib.load(filename)
         V=Vimg.get_fdata()
-        M=np.any(V!=0,axis=3)
+        eps=2*np.finfo(V.dtype).eps #mask by eps instead of 0
+        M=np.any(np.abs(V)>eps,axis=3)
         Dt=V[M>0].T
         tr=Vimg.header['pixdim'][4]
         volinfo={'image':Vimg, 'shape':Vimg.shape, 'mask':M, "extension":volext}
@@ -208,6 +221,10 @@ def load_input(filename):
     return Dt,roivals,roisizes,tr,volinfo,extension
     
 def save_timeseries(filename_noext,outputformat,output_dict, output_volume_info=None):
+    outputformat_split=None
+    if outputformat is None:
+        filename_noext,outputformat=filename_split_extension(filename_noext)
+        outputformat_split=outputformat
     outfilename=""
     shapestring=""
     if output_volume_info is not None:
@@ -220,10 +237,15 @@ def save_timeseries(filename_noext,outputformat,output_dict, output_volume_info=
         Vnew=np.zeros(outshape,dtype=output_dtype)
         Vnew[output_volume_info['mask']]=output_dict["ts"].T
         Vimg=nib.Nifti1Image(Vnew.astype(output_dtype),affine=Vimg_orig.affine,header=Vimg_orig.header)
-        outfilename=filename_noext+"."+output_volume_info["extension"]
+        if outputformat_split:
+            ext=outputformat_split
+        else:
+            ext=output_volume_info["extension"]
+        outfilename=filename_noext+"."+ext
         shapestring="x".join([str(x) for x in Vimg.shape])
         nib.save(Vimg, outfilename)
     else:
+        output_dict["ts"]=np.atleast_2d(output_dict["ts"])
         shapestring="%dx%d" % (output_dict["ts"].shape[0],output_dict["ts"].shape[1])
         if outputformat == "mat":
             outfilename=filename_noext+"."+outputformat
