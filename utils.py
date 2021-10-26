@@ -256,6 +256,9 @@ def save_timeseries(filename_noext,outputformat,output_dict, output_volume_info=
             headertxt+="\nROI_Sizes(voxels):\n"
             headertxt+=" ".join(["%d" % (x) for x in output_dict["roi_sizes"]])
             headertxt+="\nRepetition_time(sec): %g" % (output_dict["repetition_time"])
+            if "is_outlier" in output_dict:
+                headertxt+="\nOutlier_volumes:\n"
+                headertxt+=" ".join(["%d" % (x) for x in output_dict["is_outlier"]])
             outfilename=filename_noext+"."+outputformat
             np.savetxt(outfilename,output_dict["ts"],fmt="%.18f",header=headertxt,comments="# ")
     return outfilename, shapestring
