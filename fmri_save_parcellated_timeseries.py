@@ -126,10 +126,10 @@ def fmri_save_parcellated_timeseries(argv):
         labelvolmask=((labelvol!=0) * (goodvoxmask>0))>0
         roivals, roivoxidx=np.unique(labelvol[labelvolmask],return_inverse=True)
         if do_seqroi:
-            maxroi=np.max(roivals).astype(np.int)
+            maxroi=np.max(roivals).astype(np.int32)
             if len(roivals) < sequential_error_size and maxroi > sequential_error_size:
                 raise Exception("Maximum ROI label (%d) exceeded allowable size (%d), suggesting a mistake. If this was intentional, set --sequentialerrorsize" % (maxroi,sequential_error_size))
-            roisizes=np.bincount(roivals[roivoxidx].astype(np.int),minlength=maxroi+1)[1:] #skip count for roival=0
+            roisizes=np.bincount(roivals[roivoxidx].astype(np.int32),minlength=maxroi+1)[1:] #skip count for roival=0
             roivals=np.arange(1,maxroi+1,dtype=roivals.dtype)
         else:
             roisizes=np.bincount(roivoxidx)
@@ -149,8 +149,8 @@ def fmri_save_parcellated_timeseries(argv):
         unumroi=len(uroi)
 
         if do_seqroi:
-            maxroi=np.max(uroi).astype(np.int)
-            Psparse=sparse.csr_matrix((uroisize_denom[uidx],(pmaskidx,uroi[uidx].astype(np.int)-1)),shape=(numvoxels_in_roivol,maxroi),dtype=np.float32)
+            maxroi=np.max(uroi).astype(np.int32)
+            Psparse=sparse.csr_matrix((uroisize_denom[uidx],(pmaskidx,uroi[uidx].astype(np.int64)-1)),shape=(numvoxels_in_roivol,maxroi),dtype=np.float32)
         else:
             Psparse=sparse.csr_matrix((uroisize_denom[uidx],(pmaskidx,uidx)),shape=(numvoxels_in_roivol,unumroi),dtype=np.float32)
 
