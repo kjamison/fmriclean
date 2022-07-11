@@ -506,6 +506,7 @@ def fmri_clean_parcellated_timeseries(argv):
                     C,shrinkage,covest_class = compute_connmatrix(Dt_clean_outlierfree, cm, input_shrinkage)
                     
                     Cdict={"C":C,"roi_labels":roivals,"roi_sizes":roisizes,"shrinkage":shrinkage,'cov_estimator':covest_class}
+                    Cdict['input_shape_list']=[Dt_clean_outlierfree.shape]
                     savedfilename, shapestring = save_connmatrix(outbase_list[inputidx]+roisuffix+gsrsuffix+"_FC%s" % (connmeasure_shortname[cm]),outputformat,Cdict)
                     print("Saved %s (%s)" % (savedfilename,shapestring))
         
@@ -523,6 +524,7 @@ def fmri_clean_parcellated_timeseries(argv):
             roisuffix=""
         
         #concatenate multiple scans 
+        input_shape_list=[x.shape for x in outlier_free_data_list]
         Dt_clean_outlierfree=np.vstack(outlier_free_data_list)
         
         for cm in connmeasure:
@@ -534,6 +536,7 @@ def fmri_clean_parcellated_timeseries(argv):
             C,shrinkage,covest_class = compute_connmatrix(Dt_clean_outlierfree, cm, input_shrinkage)
             
             Cdict={"C":C,"roi_labels":roivals,"roi_sizes":roisizes,"shrinkage":shrinkage,'cov_estimator':covest_class}
+            Cdict['input_shape_list']=input_shape_list
             savedfilename, shapestring = save_connmatrix(outbase_list[0]+roisuffix+gsrsuffix+"_FC%s" % (connmeasure_shortname[cm]),outputformat,Cdict)
             print("Saved %s (%s)" % (savedfilename,shapestring))
     ######################################
