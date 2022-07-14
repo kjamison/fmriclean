@@ -491,6 +491,10 @@ def fmri_clean_parcellated_timeseries(argv):
                 savedfilename, shapestring = save_timeseries(outbase_list[inputidx]+roisuffix+gsrsuffix+"_tsclean", outputformat, {"ts":Dt_clean,"roi_labels":roivals, "roi_sizes":roisizes,"repetition_time":tr,"is_outlier":np.atleast_2d(outlierflat>0).T}, vol_info)
                 print("Saved %s (%s)" % (savedfilename,shapestring))
             
+            if len(connmeasure)==0 and not do_concat:
+                #can stop here if only saving tsclean
+                continue
+                
             #note: skipvols is already included in outlierflat
             Dt_clean_outlierfree=normalize(Dt_clean[outlierflat==0,:])
             
