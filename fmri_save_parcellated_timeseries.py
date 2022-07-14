@@ -59,7 +59,10 @@ def fmri_save_parcellated_timeseries(argv):
     tr=D.header['pixdim'][4]
     if tr <=0 and input_tr > 0:
         tr=input_tr
-    numvols=D.shape[-1]
+    if D.ndim < 4:
+        numvols=1
+    else:
+        numvols=D.shape[-1]
 
     if maskfile:
         goodvox=nib.load(maskfile)
@@ -68,9 +71,12 @@ def fmri_save_parcellated_timeseries(argv):
         #goodvoxmask=~np.all(D.get_fdata()==0,axis=3)
         blocksize=200
         goodvoxmask=np.ones(D.shape[:3])
-        for i in range(0,numvols,blocksize):
-            blockstop=min(i+blocksize,numvols)
-            goodvoxmask=goodvoxmask * ~np.all(D.slicer[...,i:blockstop].get_fdata(dtype=np.float32,caching="unchanged")==0,axis=3)
+        if numvols == 1:
+            goodvoxmask=D.get_fdata(dtype=np.float32)!=0
+        else:
+            for i in range(0,numvols,blocksize):
+                blockstop=min(i+blocksize,numvols)
+                goodvoxmask=goodvoxmask * ~np.all(D.slicer[...,i:blockstop].get_fdata(dtype=np.float32,caching="unchanged")==0,axis=3)
         goodvoxmask=goodvoxmask>0
         goodvox=nib.Nifti1Image(goodvoxmask,affine=D.affine,header=D.header)
 
@@ -95,10 +101,13 @@ def fmri_save_parcellated_timeseries(argv):
     if verbose:
         print("starting to load data from labelmask: %d voxels" % (np.sum(labelmask)))
     blocksize=200
-    Dmasked=np.zeros((D.shape[3],np.sum(labelmask)),dtype=np.float32)
-    for i in range(0,D.shape[3],blocksize):
-        blockstop=min(i+blocksize,D.shape[3])
-        Dmasked[i:blockstop,:]=D.slicer[...,i:blockstop].get_fdata(dtype=np.float32,caching="unchanged")[labelmask].T
+    Dmasked=np.zeros((numvols,np.sum(labelmask)),dtype=np.float32)
+    if numvols == 1:
+        Dmasked[0,:]=D.get_fdata(dtype=np.float32)[labelmask]
+    else:
+        for i in range(0,D.shape[3],blocksize):
+            blockstop=min(i+blocksize,D.shape[3])
+            Dmasked[i:blockstop,:]=D.slicer[...,i:blockstop].get_fdata(dtype=np.float32,caching="unchanged")[labelmask].T
     if verbose:
         print("done loading data from labelmask. final size %dx%d" % (Dmasked.shape[0],Dmasked.shape[1]))
     
