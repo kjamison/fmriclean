@@ -151,14 +151,25 @@ def dctfilt(S,tr,filt,filter_edge_rolloff=None,outliermat=None):
 
     return Sfilt
 
-def filename_split_extension(filepath):
+def filename_split_extension(filepath, is_cifti=False):
     filedir,filename=os.path.split(filepath)
     if "." in filename:
-        if filename.lower().endswith(".gz"):
-            extension=".".join(filename.split(".")[-2:])
+        if is_cifti:
+            dotparts=filename.split(".")
+            dotparts_nii=[i for i,x in enumerate(dotparts) if x.lower()=="nii"]
+            if len(dotparts_nii)==0:
+                extension=""
+            else:
+                extension=".".join(dotparts[dotparts_nii[-1]-1:])
         else:
-            extension=filename.split(".")[-1]
-        filebase=os.path.join(filedir,filename[:-len(extension)-1])
+            if filename.lower().endswith(".gz"):
+                extension=".".join(filename.split(".")[-2:])
+            else:
+                extension=filename.split(".")[-1]
+        if extension:
+            filebase=os.path.join(filedir,filename[:-len(extension)-1])
+        else:
+            filebase=filepath
     else:
         extension=""
         filebase=filepath
@@ -179,19 +190,48 @@ def load_input(filename):
         roisizes=M['roi_sizes'][0]
         extension="mat"
     elif filename.lower().endswith(".nii.gz") or filename.lower().endswith(".nii"):
-        if filename.lower().endswith(".gz"):
-            volext=".".join(filename.lower().split(".")[-2:])
-        else:
-            volext=filename.lower().split(".")[-1]
-
-            
+        
         Vimg=nib.load(filename)
+        is_cifti=type(Vimg).__name__.lower().find("cifti")>=0
+        _, volext = filename_split_extension(filename,is_cifti=is_cifti)
+        
         V=Vimg.get_fdata()
         eps=2*np.finfo(V.dtype).eps #mask by eps instead of 0
-        M=np.any(np.abs(V)>eps,axis=3)
-        Dt=V[M>0].T
-        tr=Vimg.header['pixdim'][4]
-        volinfo={'image':Vimg, 'shape':Vimg.shape, 'mask':M, "extension":volext}
+        
+        if is_cifti:
+            ax_idx=Vimg.header.mapped_indices
+            ax_names=[type(Vimg.header.get_axis(ax)).__name__ for ax in ax_idx]
+            time_axis=[ax for i,ax in enumerate(ax_idx) if ax_names[i].lower().find("seriesaxis")>=0]
+            non_brain_axis=[ax for i,ax in enumerate(ax_idx) if ax_names[i].lower().find("brainmodelaxis")<0 and ax_names[i].lower().find("parcelsaxis")<0]
+            if len(time_axis)>0:
+                time_axis=time_axis[-1]
+            elif len(non_brain_axis)>0:
+                time_axis=non_brain_axis[-1]
+            else:
+                Exception("No time axis found")
+            
+            if time_axis < 0 or time_axis > 1:
+                raise Exception("Unknown time axis: %d. Should be 0 or 1" % (time_axis))
+            
+            M=np.any(np.abs(V)>eps,axis=time_axis)
+            if time_axis == 0:
+                Dt=V[:,M>0]
+            elif time_axis == 1:
+                Dt=V[M>0,:].T
+            
+            try:
+                tr=Vimg.header.get_axis(time_axis).step
+            except:
+                #for non SeriesAxis (eg: stacked dlabel axes), TR does not apply
+                tr=0
+        else:
+            #read normal nifti
+            M=np.any(np.abs(V)>eps,axis=3)
+            Dt=V[M>0].T
+            tr=Vimg.header['pixdim'][4]
+            time_axis=3
+        
+        volinfo={'image':Vimg, 'shape':Vimg.shape, 'mask':M, "extension":volext, "is_cifti":is_cifti,"time_axis":time_axis}
         extension=volext
     elif filename.lower().endswith(".txt"):
         Dt=np.loadtxt(filename)
@@ -221,23 +261,61 @@ def load_input(filename):
     return Dt,roivals,roisizes,tr,volinfo,extension
     
 def save_timeseries(filename_noext,outputformat,output_dict, output_volume_info=None):
+    filename_noext_input=filename_noext
     outputformat_split=None
     if outputformat is None:
         filename_noext,outputformat=filename_split_extension(filename_noext)
         outputformat_split=outputformat
+        
     outfilename=""
     shapestring=""
     if output_volume_info is not None:
-        Vimg_orig=output_volume_info['image']
-        outshape=list(Vimg_orig.shape[:3])
-        if output_dict["ts"].ndim > 1:
-            outshape+=[output_dict["ts"].shape[0]]
-        #output_dtype=Vimg_orig.get_data_dtype()
-        output_dtype=np.float32
-        Vnew=np.zeros(outshape,dtype=output_dtype)
-        Vnew[output_volume_info['mask']]=output_dict["ts"].T
-        Vimg=nib.Nifti1Image(Vnew.astype(output_dtype),affine=Vimg_orig.affine,header=Vimg_orig.header)
+        if output_volume_info['is_cifti']:
+            Vimg_orig=output_volume_info['image']
+            outshape=list(Vimg_orig.shape)
+            if output_dict["ts"].ndim > 1:
+                outshape[output_volume_info['time_axis']]=output_dict["ts"].shape[0]
+            else:
+                output_dict["ts"]=np.atleast_2d(output_dict["ts"])
+                outshape[output_volume_info['time_axis']]=output_dict["ts"].shape[0]
+            #output_dtype=Vimg_orig.get_data_dtype()
+            output_dtype=np.float32
+            Vnew=np.zeros(outshape,dtype=output_dtype)
+            if output_volume_info['time_axis']==0:
+                Vnew[:,output_volume_info['mask']]=output_dict["ts"]
+            else:
+                Vnew[output_volume_info['mask'],:]=output_dict["ts"].T
+            new_header=Vimg_orig.header
+            
+            time_axis_type=type(new_header.get_axis(output_volume_info['time_axis'])).__name__
+            if time_axis_type.lower().find("seriesaxis")>=0:
+                axlist=[output_volume_info['image'].header.get_axis(i) for i in output_volume_info['image'].header.mapped_indices]
+                axlist[output_volume_info['time_axis']].size=output_dict["ts"].shape[0]
+                new_header=nib.cifti2.cifti2.Cifti2Header.from_axes(axlist)
+                
+            elif time_axis_type.lower().find("scalaraxis")>=0:
+                axlist=[output_volume_info['image'].header.get_axis(i) for i in output_volume_info['image'].header.mapped_indices]
+                if output_dict["ts"].shape[0] != output_volume_info['shape'][output_volume_info['time_axis']]:
+                    namelist=["map%04d" % (x) for x in range(output_dict["ts"].shape[0])]
+                    axlist[output_volume_info['time_axis']]=nib.cifti2.cifti2_axes.ScalarAxis(name=namelist)
+                    new_header=nib.cifti2.cifti2.Cifti2Header.from_axes(axlist)
+                
+            Vimg=nib.cifti2.cifti2.Cifti2Image(Vnew.astype(output_dtype),header=new_header)
+        else:
+            Vimg_orig=output_volume_info['image']
+            outshape=list(Vimg_orig.shape[:3])
+            if output_dict["ts"].ndim > 1:
+                outshape+=[output_dict["ts"].shape[0]]
+            #output_dtype=Vimg_orig.get_data_dtype()
+            output_dtype=np.float32
+            Vnew=np.zeros(outshape,dtype=output_dtype)
+            Vnew[output_volume_info['mask']]=output_dict["ts"].T
+            Vimg=nib.Nifti1Image(Vnew.astype(output_dtype),affine=Vimg_orig.affine,header=Vimg_orig.header)
+        
         if outputformat_split:
+            #redo filename split now that we know. whether "is_cifti" is available
+            filename_noext,outputformat=filename_split_extension(filename_noext_input,is_cifti=output_volume_info['is_cifti'])
+            outputformat_split=outputformat
             ext=outputformat_split
         else:
             ext=output_volume_info["extension"]
