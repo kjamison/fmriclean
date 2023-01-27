@@ -38,9 +38,12 @@ def addsquare_txt(s):
         s=[s]
     return s+["sqr."+x for x in s]
 
-def normalize(x):
-    xc=x-np.mean(x,axis=0)
-    xdenom=np.sqrt(np.mean(xc**2,axis=0))
+def normalize(x,axis=0,denomfun='mean'):
+    xc=x-np.mean(x,axis=axis)
+    if denomfun=='mean':
+        xdenom=np.sqrt(np.mean(xc**2,axis=axis))
+    elif denomfun=='sum':
+        xdenom=np.sqrt(np.sum(xc**2,axis=axis))
     xdenom[xdenom==0]=1
     return xc/xdenom
     
@@ -226,10 +229,16 @@ def load_input(filename):
                 tr=0
         else:
             #read normal nifti
-            M=np.any(np.abs(V)>eps,axis=3)
-            Dt=V[M>0].T
-            tr=Vimg.header['pixdim'][4]
-            time_axis=3
+            if Vimg.ndim > 3:
+                M=np.any(np.abs(V)>eps,axis=3)
+                Dt=V[M>0].T
+                tr=Vimg.header['pixdim'][4]
+                time_axis=3
+            else:
+                M=np.abs(V)>eps
+                Dt=V[M>0].T
+                tr=Vimg.header['pixdim'][4]
+                time_axis=3
         
         volinfo={'image':Vimg, 'shape':Vimg.shape, 'mask':M, "extension":volext, "is_cifti":is_cifti,"time_axis":time_axis}
         extension=volext
