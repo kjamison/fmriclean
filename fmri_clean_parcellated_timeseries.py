@@ -379,7 +379,7 @@ def fmri_clean_parcellated_timeseries(argv):
             
             onesmat=np.ones(mp.shape[0])[:,None]
             detrendmat=np.arange(mp.shape[0])[:,None]
-            
+                
             ########################################
             if not do_gsr:
                 gmreg=np.zeros((numvols,0))

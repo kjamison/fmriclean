@@ -20,7 +20,9 @@ def argument_parse(argv):
     
 #########################################################
 
-def parse_roilist(roilist):
+#this old version splits by "," first, but really we want to use commas within an roi input set eg: 1,2=4 and just use spaces for separate inputs
+#but keep this here for now for reference in case another script used it and I forgot
+def parse_roilist_oldtype(roilist):
     inlist=[]
     outlist=[]
     for s in roilist:
@@ -43,6 +45,31 @@ def parse_roilist(roilist):
                 outval=[outval]*len(ppval)
             inlist+=ppval
             outlist+=outval
+    return inlist,outlist
+    
+def parse_roilist(roilist):
+    inlist=[]
+    outlist=[]
+    for p in roilist:
+        outval=None
+        if "=" in p:
+            p_eq=p.split("=")
+            p=p_eq[0]
+            outval=float(p_eq[-1])
+        if "-" in p:
+            pp=p.split("-")
+            ppval=np.arange(float(pp[0]),float(pp[-1])+1).tolist()
+        elif "," in p:
+            pp=p.split(",")
+            ppval=[float(ppi) for ppi in pp]
+        else:
+            ppval=[float(p)]
+        if outval is None:
+            outval=ppval
+        else:
+            outval=[outval]*len(ppval)
+        inlist+=ppval
+        outlist+=outval
     return inlist,outlist
     
 def fmri_reorder_parcellated_timeseries(argv):
@@ -77,13 +104,20 @@ def fmri_reorder_parcellated_timeseries(argv):
         for i,vi in enumerate(inputinfo['input_labels']):
             vo=inputinfo['output_labels'][i]
             m=roivals==vi
-            midx=np.where(m)[0][0]
-            if vo in tsdict_vals:
-                tsdict_vals[vo]=tsdict_vals[vo] + M['ts'][:,midx]*roisizes[midx]
-                tsdict_sizelist[vo]+=roisizes[midx]
+            if not any(m):
+                #fill zeros if this roi label is not found in input
+                rts=np.zeros(M['ts'][:,0].shape)
+                rsize=0
             else:
-                tsdict_vals[vo]=M['ts'][:,midx]*roisizes[midx]
-                tsdict_sizelist[vo]=roisizes[midx]
+                midx=np.where(m)[0][0]
+                rts=M['ts'][:,midx]
+                rsize=roisizes[midx]
+            if vo in tsdict_vals:
+                tsdict_vals[vo]=tsdict_vals[vo] + rts*rsize
+                tsdict_sizelist[vo]+=rsize
+            else:
+                tsdict_vals[vo]=rts*rsize
+                tsdict_sizelist[vo]=rsize
                 
         tsdict_valshift=max(list(tsdict_vals.keys()))
     
