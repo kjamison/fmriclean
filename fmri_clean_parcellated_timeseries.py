@@ -38,7 +38,7 @@ def argument_parse(argv):
     parser.add_argument('--motionparamtype',action='store',dest='mptype',choices=['spm','hcp','fsl'],default='fsl')
     parser.add_argument('--motionparam',action='append',dest='mpfile',nargs='*')
     parser.add_argument('--outlierfile',action='append',dest='outlierfile',nargs='*')
-    parser.add_argument('--shrinkage',action='store',dest='shrinkage',default='lw')
+    parser.add_argument('--shrinkage',action='store',dest='shrinkage',default='0')
     parser.add_argument('--sequentialroi',action='store_true',dest='sequentialroi',help='Output columns for ALL sequential ROI values from 1:max (otherwise exactly the same columns as input)')
     parser.add_argument('--sequentialroierrorsize',action='store',dest='sequentialroierrorsize',type=int,default=1000,help='Throw error if using --sequential and largest ROI label is larger than this')
     parser.add_argument('--concat',action='store_true',dest='concat',help='Concatenate time series when multiple --input or --inputpattern are given (need multiple --confound in this case as well)')
