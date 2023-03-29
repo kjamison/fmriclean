@@ -8,23 +8,24 @@ import re
 from utils import *
 
 def argument_parse(argv):
-    parser=argparse.ArgumentParser(description='Voxelwise connectivity strength *after* denoising')
+    parser=argparse.ArgumentParser(description='Compute RMS of global signal fit to each region')
 
-    parser.add_argument('--input',action='append',dest='inputvol',nargs='*')
+    parser.add_argument('--inputnogsr',action='append',dest='inputnogsr',nargs='*')
+    parser.add_argument('--inputgsr',action='append',dest='inputgsr',nargs='*')
     parser.add_argument('--confoundfile',action='append',dest='confoundfile',nargs='*')
     parser.add_argument('--outbase',action='append',dest='outbase',nargs='*')
     parser.add_argument('--skipvols',action='store',dest='skipvols',type=int,default=5)
     parser.add_argument('--outlierfile',action='append',dest='outlierfile',nargs='*')
     parser.add_argument('--mask',action='store',dest='maskfile',help='mask over which to compute connectivity strength (eg: gray matter voxels)',nargs='*')
-    parser.add_argument('--cctransform',action='store',dest='cctransform',choices=['none','abs','pos','neg'],default='none')
     parser.add_argument('--outputvolumeformat',action='store',dest='outputvolumeformat',choices=['same','auto','nii','nii.gz'],default='same')
-    parser.add_argument('--blocksize',action='store',dest='blocksize',type=int,default=200,help='Block size to limit memory usage (default: 200)')
+    parser.add_argument('--concat',action='store_true',dest='concat')
     parser.add_argument('--verbose',action='store_true',dest='verbose')
     return parser.parse_args(argv)
-
-def fmri_node_strength(argv):
+    
+def run_rmsglobal(argv):
     args=argument_parse(argv)
-    inputvol_list=flatarglist(args.inputvol)
+    inputnogsr_list=flatarglist(args.inputnogsr)
+    inputgsr_list=flatarglist(args.inputgsr)
     outbase_list=flatarglist(args.outbase)
     skipvols=args.skipvols
     outlierfile_list=flatarglist(args.outlierfile)
@@ -32,26 +33,20 @@ def fmri_node_strength(argv):
     maskfile_list=flatarglist(args.maskfile)
     verbose=args.verbose
     outputvolumeformat=args.outputvolumeformat
-    cctransform_type=args.cctransform
-    
-    
-    #200 was fastest for 91k cifti
-    #but might want to adjust this for larger voxelwise data?
-    blocksize=args.blocksize
-    
+    do_concat=args.concat
+
     is_pattern=False
-    input_list=inputvol_list
+    input_list=inputnogsr_list
     num_inputs=len(input_list)
 
 
-    print("Input time series: %s" % (inputvol_list))
+    print("Input NON-GSR time series: %s" % (inputnogsr_list))
+    print("Input GSR time series: %s" % (inputgsr_list))
     print("Ignore first N volumes: %s" % (skipvols))
     print("Confound file: %s" % (confoundfile_list))
     print("Outlier timepoint file: %s" % (outlierfile_list))
     print("Output basename: %s" % (outbase_list))
-    print("CC transformation: %s" % (cctransform_type))
     print("Mask file: %s" % (maskfile_list))
-    print("Block size: %s" % (blocksize))
 
     # read in confounds (from a confoundfile and/or specified motionparam and outlier arguments)
     confounds_list=[{"gmreg":None,"wmreg":None,"csfreg":None,"mp":None,"resteffect":None,"outliermat":None} for i in range(num_inputs)]
@@ -84,13 +79,18 @@ def fmri_node_strength(argv):
             outliermat=np.loadtxt(outlierfile)>0
             confounds_list[inputidx]["outliermat"]
 
-    for inputidx,inputfile in enumerate(input_list):
+    Dt_concat=[]
+    for inputidx,inputfile in enumerate(inputnogsr_list):
         confounds_dict=confounds_list[inputidx]
 
         Dt,roivals,roisizes,tr_input,vol_info,input_extension = load_input(inputfile)
         if vol_info is not None and not outputvolumeformat in ["same","auto"]:
             vol_info["extension"]=outputvolumeformat
-    
+        
+        Dt_gsr,roivals,roisizes,tr_input,vol_info,input_extension = load_input(inputgsr_list[inputidx])
+        
+        Dt=Dt-Dt_gsr
+        
         print("Loaded input file: %s (%dx%d)" % (inputfile,Dt.shape[0],Dt.shape[1]))
         if tr_input:
             tr=tr_input
@@ -128,33 +128,21 @@ def fmri_node_strength(argv):
         
         numvols_not_outliers=np.sum(np.abs(outlierflat)==0,axis=0)
         print("Non-outlier volumes: ", numvols_not_outliers)
-    
-        #zscore the time series, excluding outliers
-        #note: use 'sum' for pearson-friendly output
-        Dt=normalize(Dt[outlierflat==0,:],axis=0,denomfun='sum')
         
         print("Masked data size after outlier exclusion: (%dx%d)" % (Dt.shape[0],Dt.shape[1]))
         
-
-        imax=Dt.shape[1]
-        #imax=10000
-        if cctransform_type == 'none':
-            cc_filt_fun=lambda x: x
-        elif cctransform_type == 'abs':
-            cc_filt_fun=np.abs
-        elif cctransform_type == 'pos':
-            cc_filt_fun=lambda x: np.maximum(x,0)
-        elif cctransform_type == 'neg':
-            cc_filt_fun=lambda x: np.maximum(-x,0)
+        Dt_rms=np.sqrt(np.mean(Dt[outlierflat==0,:]**2,axis=0))
         
-        Dcc=np.hstack([np.mean(cc_filt_fun(Dt[:,i:min(i+blocksize,imax)].T@Dt),axis=1) for i in range(0,imax,blocksize)])
-        Dcc-=1/Dt.shape[1] #subtract the 1/N for each voxel's entry on the diagonal
-        Dcc_new=np.zeros(Dt.shape[1])
-        Dcc_new[:Dcc.size]=Dcc
-        Dcc=Dcc_new
+        if do_concat:
+            Dt_concat+=[Dt_rms]
         
-        savedfilename, shapestring = save_timeseries(outbase_list[inputidx]+"", input_extension, {"ts":Dcc,"roi_labels":roivals,"roi_sizes":roisizes,"repetition_time":tr}, vol_info)
-        print("Saved %s (%s)" % (savedfilename,shapestring))
+        if len(outbase_list)==num_inputs:
+            savedfilename, shapestring = save_timeseries(outbase_list[inputidx]+"", input_extension, {"ts":Dt_rms,"roi_labels":roivals,"roi_sizes":roisizes,"repetition_time":tr}, vol_info)
+            print("Saved %s (%s)" % (savedfilename,shapestring))
     
+    if do_concat and len(Dt_concat)>1:
+        Dt_concat=np.mean(np.vstack(Dt_concat),axis=0)
+        savedfilename, shapestring = save_timeseries(outbase_list[0]+"", input_extension, {"ts":Dt_concat,"roi_labels":roivals,"roi_sizes":roisizes,"repetition_time":tr}, vol_info)
+        print("Saved %s (%s)" % (savedfilename,shapestring))
 if __name__ == "__main__":
-    fmri_node_strength(sys.argv[1:])
+    run_rmsglobal(sys.argv[1:])
