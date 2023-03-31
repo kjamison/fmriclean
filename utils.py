@@ -69,9 +69,9 @@ def naninterp(x,outliermat=None):
     #linearly interpolate segments of data with nans (to allow fftfilt)
     notnan=~np.any(np.isnan(x),axis=1)
     if outliermat is not None:
-        notnan[np.sum(np.abs(outliermat),axis=1)>0,:]=False
+        notnan[np.sum(np.abs(outliermat),axis=1)>0]=False
     notnanidx=np.where(notnan)[0]
-    return scipy.interpolate.interp1d(notnanidx,x[notnanidx,:],axis=0)(np.arange(x.shape[0]))
+    return scipy.interpolate.interp1d(notnanidx,x[notnanidx,:],axis=0,bounds_error=False,fill_value=0)(np.arange(x.shape[0]))
     
 def fftfilt(x,tr,filt,filter_edge_rolloff=None):
     fy=np.fft.fft(np.vstack([x,x[::-1,:]]),axis=0)
