@@ -42,11 +42,15 @@ tr=0.8 #if left out, can be inferred from scanfile header
 skipvols=5
 alff_lowfreq="0.008"
 alff_highfreq="0.09"
+gsrarg=""
+if [ "${gsrarg}" != "" ]; then
+    gsrname="_gsr" #if --gsr was used
+fi
 
-#output will be ${outputbase}_fmriclean${filtname}${gsrname}_tsclean.nii.gz
-python fmri_clean_parcellated_timeseries.py --input ${scanfile} --confoundfile ${outputbase}_fmriclean_confounds.mat $gsrarg --outbase ${outputbase}_fmriclean --skipvols ${skipvols} --connmeasure none --savets
+#output from before will be ${outputbase}_fmriclean${filtname}${gsrname}_tsclean.nii.gz
+python fmri_clean_parcellated_timeseries.py --input ${scanfile} --confoundfile ${outputbase}_fmriclean_confounds.mat $filtarg $gsrarg --outbase ${outputbase}_fmriclean_${filtname} --skipvols ${skipvols} --connmeasure none --savets
 	
-python fmri_alff.py --input ${outputbase}_fmriclean${filtname}${gsrname}_tsclean.nii.gz --confoundfile ${outputbase}_fmriclean_confounds.mat --outbase ${outputbase}_fmriclean${filtname}${gsrname}_tsclean --lffrange ${alff_lowfreq} ${alff_highfreq} --totalfreqrange 0 inf
+python fmri_alff.py --input ${outputbase}_fmriclean_${filtname}${gsrname}_tsclean.nii.gz --confoundfile ${outputbase}_fmriclean_confounds.mat --outbase ${outputbase}_fmriclean_${filtname}${gsrname}_tsclean --lffrange ${alff_lowfreq} ${alff_highfreq} --totalfreqrange 0 inf
 
 #final output will be:
 #${outputbase}_fmriclean${filtname}${gsrname}_tsclean_alff.nii.gz
