@@ -53,5 +53,11 @@ python fmri_clean_parcellated_timeseries.py --input ${scanfile} --confoundfile $
 python fmri_alff.py --input ${outputbase}_fmriclean_${filtname}${gsrname}_tsclean.nii.gz --confoundfile ${outputbase}_fmriclean_confounds.mat --outbase ${outputbase}_fmriclean_${filtname}${gsrname}_tsclean --lffrange ${alff_lowfreq} ${alff_highfreq} --totalfreqrange 0 inf
 
 #final output will be:
-#${outputbase}_fmriclean${filtname}${gsrname}_tsclean_alff.nii.gz
-#${outputbase}_fmriclean${filtname}${gsrname}_tsclean_falff.nii.gz
+#${outputbase}_fmriclean_${filtname}${gsrname}_tsclean_alff.nii.gz
+#${outputbase}_fmriclean_${filtname}${gsrname}_tsclean_falff.nii.gz
+
+#to parcellate the voxelwise falff:
+roiname=fs86
+roifile=fs86.nii.gz
+
+python fmri_save_parcellated_timeseries.py --input ${outputbase}_fmriclean_${filtname}${gsrname}_tsclean_falff.nii.gz --roifile ${roifile} --outbase ${outputbase}_fmriclean_${filtname}${gsrname}_tsclean_falff_${roiname} --outputformat mat
