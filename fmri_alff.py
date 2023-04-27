@@ -123,6 +123,7 @@ def fmri_alff(argv):
         
         F, freq = nanfft(Dt,tr,outliermat=outliermat,inverse=False)
         F=2*np.abs(F)/numvols_not_outliers
+        F[0,:]=0 #remove DC in case data is not detrended
     
         #note: falff should be sum(lff)/sum(total) to be fractional
         Nlff=sum((freq>=lffrange[0]) & (freq<=lffrange[1]))
