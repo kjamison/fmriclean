@@ -1,4 +1,4 @@
-python>=3.7
+python_version>=3.7
 nibabel>=5.1.0
 nilearn>=0.10.0
 numpy>=1.21.2
