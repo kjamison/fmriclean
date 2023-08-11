@@ -28,6 +28,8 @@ def argument_parse(argv):
     parser.add_argument('--ewmmask',action='store',dest='ewmfile',help='white-matter mask ALREADY eroded')
     parser.add_argument('--ecsfmask',action='store',dest='ecsffile',help='CSF mask ALREADY eroded')
     parser.add_argument('--erosionvoxels',action='store',dest='erosionvoxels',type=int,default=1,help='Number of voxels to erode for WM/CSF')
+    parser.add_argument('--numwmregressors',action='store',dest='num_wm_regressors',type=int,default=5,help='How many regressors from WM?')       
+    parser.add_argument('--numcsfregressors',action='store',dest='num_csf_regressors',type=int,default=5,help='How many regressors from CSF?')
     parser.add_argument('--hrffile',action='store',dest='hrffile')
     parser.add_argument('--outlierfile',action='store',dest='outlierfile')
     parser.add_argument('--skipvols',action='store',dest='skipvols',type=int,default=5)
@@ -83,6 +85,10 @@ def fmri_save_confounds(argv):
     do_erode_wm=True
     do_erode_csf=True
 
+    #how many nuisance regressors for each tissue
+    num_csfreg=args.num_csf_regressors
+    num_wmreg=args.num_wm_regressors
+    
     mask_threshold=0.5
 
     if hcpmnidir and hcpscanname:
@@ -249,9 +255,6 @@ def fmri_save_confounds(argv):
     wmreg=np.zeros((numvols,0))
     csfreg=np.zeros((numvols,0))
 
-    #how many nuisance regressors for each tissue
-    num_csfreg=5
-    num_wmreg=5
     
     #minimum number of voxels per nuisance regressor (eg: must have at least 10 CSF voxels to extract 5 regressors)
     #this is just a mimimal guess to avoid error
