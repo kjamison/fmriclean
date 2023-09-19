@@ -5,7 +5,7 @@ import argparse
 from scipy.io import savemat
 import os.path
 from scipy import sparse
-from utils import flatlist
+from utils import flatlist, get_first_volume_3D
 
 def argument_parse(argv):
     parser=argparse.ArgumentParser(description='fMRI Parcellation')
@@ -66,13 +66,13 @@ def fmri_save_parcellated_timeseries(argv):
 
     if maskfile:
         goodvox=nib.load(maskfile)
-        goodvoxmask=goodvox.get_fdata()>0
+        goodvoxmask=get_first_volume_3D(goodvox.get_fdata())>0
     else:
         #goodvoxmask=~np.all(D.get_fdata()==0,axis=3)
         blocksize=200
         goodvoxmask=np.ones(D.shape[:3])
         if numvols == 1:
-            goodvoxmask=D.get_fdata(dtype=np.float32)!=0
+            goodvoxmask=get_first_volume_3D(D.get_fdata(dtype=np.float32))!=0
         else:
             for i in range(0,numvols,blocksize):
                 blockstop=min(i+blocksize,numvols)
@@ -103,7 +103,7 @@ def fmri_save_parcellated_timeseries(argv):
     blocksize=200
     Dmasked=np.zeros((numvols,np.sum(labelmask)),dtype=np.float32)
     if numvols == 1:
-        Dmasked[0,:]=D.get_fdata(dtype=np.float32)[labelmask]
+        Dmasked[0,:]=get_first_volume_3D(D.get_fdata(dtype=np.float32))[labelmask]
     else:
         for i in range(0,D.shape[3],blocksize):
             blockstop=min(i+blocksize,D.shape[3])

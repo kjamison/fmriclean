@@ -177,7 +177,13 @@ def filename_split_extension(filepath, is_cifti=False):
         extension=""
         filebase=filepath
     return filebase,extension
-    
+
+def get_first_volume_3D(voldata):
+    if voldata.ndim == 4:
+        return voldata[:,:,:,0]
+    else:
+        return voldata
+
 def load_input(filename):
     tr=None
     volinfo=None
