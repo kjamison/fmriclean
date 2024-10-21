@@ -443,6 +443,60 @@ def read_motion_params(movfile, movfile_type):
     return mp, mp_names
 
 
+
+def save_connmatrix(filename_noext,outputformat,output_dict):
+    outfilename=""
+    shapestring="%dx%d" % (output_dict["C"].shape[0],output_dict["C"].shape[1])
+    if outputformat == "mat":
+        outfilename=filename_noext+"."+outputformat
+        savemat(outfilename,output_dict,format='5',do_compression=True)
+    else:
+        headertxt="ROI_Labels:\n"
+        headertxt+=" ".join(["%d" % (x) for x in output_dict["roi_labels"]])
+        headertxt+="\nROI_Sizes(voxels):\n"
+        headertxt+=" ".join(["%d" % (x) for x in output_dict["roi_sizes"]])
+        headertxt+="\nCovariance_estimator: %s" % (output_dict["cov_estimator"])
+        headertxt+="\nCovariance_shrinkage: %s" % (output_dict["shrinkage"])
+        outfilename=filename_noext+"."+outputformat
+        np.savetxt(outfilename,output_dict["C"],fmt="%.18f",header=headertxt,comments="# ")
+    return outfilename, shapestring
+            
+def load_connmatrix(filename):
+    conn_dict={}
+    
+    if filename.lower().endswith(".mat"):
+        M=loadmat(filename,simplify_cells=True)
+        mfield_data_search=['C','FC','data']
+        mfield_data_earch=[x.upper() for x in mfield_data_search]
+        for m in mfield_data_search:
+            if m in M:
+                conn_dict['C']=M[m]
+                break
+        mfield_search=['roi_labels','roi_sizes','cov_estimator','shrinkage']
+        for m in mfield_search:
+            if m in M:
+                conn_dict[m]=M[m]
+    else:
+        sep=None
+        if filename.lower().endswith(".csv"):
+            sep=","
+        with open(filename,'r') as fid:
+            commentlines=[s.strip() for s in fid.readlines() if s.startswith("#")]
+        for i,l in enumerate(commentlines):
+            if l.upper().startswith("# ROI_LABELS"):
+                labelstr=commentlines[i+1].replace("#","").split(sep)
+                conn_dict['roi_labels']=[int(x) for x in labelstr]
+            if l.upper().startswith("# ROI_SIZES"):
+                sizestr=commentlines[i+1].replace("#","").split(sep)
+                conn_dict['roi_sizes']=[float(x) for x in sizestr]
+            if l.upper().startswith("# COVARIANCE_ESTIMATOR"):
+                conn_dict['cov_estimator']=l.split(":")[-1].strip()
+            if l.upper().startswith("# COVARIANCE_SHRINKAGE"):
+                conn_dict['shrinkage']=float(l.split(":")[-1].strip())
+            
+        conn_dict['C']=np.loadtxt(filename,comments='#')
+    return conn_dict
+
 def get_version(include_date=False):
     """Return the version of this package"""
     if include_date:
