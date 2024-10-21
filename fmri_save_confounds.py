@@ -285,8 +285,10 @@ def fmri_save_confounds(argv):
     confoundnames=["ones"] + addderiv_txt(gmreg_names) + wmreg_names + csfreg_names + addsquare_txt(addderiv_txt(mp_names)) + addderiv_txt(["rest"]) + outliermat_names + ["linear"]
     confounds=np.hstack([onesmat,addderiv(gmreg),wmreg,csfreg,addsquare(addderiv(mp)),addderiv(resteffect),outliermat,detrendmat])
 
+    version_info=package_version_dict()
+    
     if outputfile.lower().endswith(".mat"):
-        savemat(outputfile,{"confounds":confounds,"confoundnames":confoundnames},format='5',do_compression=True)
+        savemat(outputfile,{"confounds":confounds,"confoundnames":confoundnames, "version_info":version_info},format='5',do_compression=True)
     else:
         confoundheadertxt=" ".join(confoundnames)
         np.savetxt(outputfile,confounds,fmt="%.18f",header=confoundheadertxt,comments="# ")

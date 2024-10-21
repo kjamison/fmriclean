@@ -1,15 +1,11 @@
 import numpy as np
-import nibabel as nib
 import nilearn
 import nilearn.connectome
-#import nipy.modalities.fmri.hrf
 import sys
 import argparse
 from scipy.io import loadmat,savemat
 import scipy.signal, scipy.interpolate
 import sklearn
-import os.path
-import re
 
 from utils import *
 

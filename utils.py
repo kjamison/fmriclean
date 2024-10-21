@@ -6,6 +6,12 @@ import sys
 import os.path
 import pandas as pd
 
+from nilearn import __version__ as nilearn_version
+from scipy import __version__ as scipy_version
+from numpy import __version__ as numpy_version
+from nibabel import __version__ as nibabel_version
+
+from _version import __version__, __version_date__
 
 def flatlist(l):
     if l is None:
@@ -436,3 +442,19 @@ def read_motion_params(movfile, movfile_type):
     
     return mp, mp_names
 
+
+def get_version(include_date=False):
+    """Return the version of this package"""
+    if include_date:
+        return __version__+" ("+__version_date__+")"
+    else:
+        return __version__
+        
+def package_version_dict():
+    return {
+        'fmriclean': get_version(include_date=True),
+        'nilearn': nilearn_version, 
+        'numpy': numpy_version, 
+        'scipy': scipy_version, 
+        'nibabel': nibabel_version
+    }
