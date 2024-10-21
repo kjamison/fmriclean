@@ -124,6 +124,7 @@ def fmri_clean_parcellated_timeseries(argv):
     sequential_roi_error_size=args.sequentialroierrorsize
     do_concat=args.concat
     input_shrinkage=args.shrinkage
+    hrffile=args.hrffile
     
     if not connmeasure:
         connmeasure=['correlation']
