@@ -450,11 +450,16 @@ def get_version(include_date=False):
     else:
         return __version__
         
-def package_version_dict():
-    return {
+def package_version_dict(as_string=False):
+    """Return a dictionary of package versions used by this package"""
+    versions={
         'fmriclean': get_version(include_date=True),
         'nilearn': nilearn_version, 
         'numpy': numpy_version, 
         'scipy': scipy_version, 
         'nibabel': nibabel_version
     }
+    if as_string:
+        return "; ".join(["%s: %s" % (k,v) for k,v in versions.items()])
+    else:
+        return versions

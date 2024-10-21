@@ -3,7 +3,7 @@ import numpy as np
 import sys
 import argparse
 from pathlib import Path 
-from utils import prepadZero, params2matrix, read_motion_params
+from utils import prepadZero, params2matrix, read_motion_params, package_version_dict
 
 def argument_parse(argv):
     parser=argparse.ArgumentParser(description='ART-style outlier detection on motion-corrected fMRI time series and motion parameter estimates')
@@ -24,7 +24,9 @@ def argument_parse(argv):
     parser.add_argument('--connstrict',action='store_true',dest='connstrict',help='(use CONN toolbox strict parameters: -gt 3 -mt .5 -mc -gd -md)')
     parser.add_argument('--connloose',action='store_true',dest='connloose',help='(use CONN toolbox loose parameters: -gt 9 -mt 2 -mc -gd -md)')
     parser.add_argument('--excludevols','-ex',action='store',dest='excludevols',type=int,default=0,help='Number of volumes to AUTOMATICALLY mark as outliers at start of scan')
-
+    
+    parser.add_argument('--version', action='version',version=package_version_dict(as_string=True))
+    
     return parser.parse_args(argv)
     
 def fmri_outlier_detection(argv):

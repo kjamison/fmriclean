@@ -5,7 +5,7 @@ import argparse
 from scipy.io import savemat
 import os.path
 from scipy import sparse
-from utils import flatlist, get_first_volume_3D
+from utils import flatlist, get_first_volume_3D, package_version_dict
 
 def argument_parse(argv):
     parser=argparse.ArgumentParser(description='fMRI Parcellation')
@@ -23,6 +23,8 @@ def argument_parse(argv):
     parser.add_argument('--outputformat',action='store',dest='outputformat',choices=['mat','txt'],default='mat')
     parser.add_argument('--verbose',action='store_true',dest='verbose')
 
+    parser.add_argument('--version', action='version',version=package_version_dict(as_string=True))
+    
     return parser.parse_args(argv)
 
 def fmri_save_parcellated_timeseries(argv):

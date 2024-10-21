@@ -41,6 +41,8 @@ def argument_parse(argv):
     parser.add_argument('--concat',action='store_true',dest='concat',help='Concatenate time series when multiple --input or --inputpattern are given (need multiple --confound in this case as well)')
     parser.add_argument('--verbose',action='store_true',dest='verbose')
     
+    parser.add_argument('--version', action='version',version=package_version_dict(as_string=True))
+    
     return parser.parse_args(argv)
 
 def save_connmatrix(filename_noext,outputformat,output_dict):

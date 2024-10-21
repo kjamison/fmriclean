@@ -25,7 +25,9 @@ def argument_parse(argv):
     parser.add_argument('--outlierfile',action='append',dest='outlierfile',nargs='*')
     parser.add_argument('--outputvolumeformat',action='store',dest='outputvolumeformat',choices=['same','auto','nii','nii.gz'],default='same')
     parser.add_argument('--verbose',action='store_true',dest='verbose')
-
+    
+    parser.add_argument('--version', action='version',version=package_version_dict(as_string=True))
+    
     return parser.parse_args(argv)
 
 def fmri_alff(argv):

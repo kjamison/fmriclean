@@ -36,6 +36,8 @@ def argument_parse(argv):
     parser.add_argument('--skipvols',action='store',dest='skipvols',type=int,default=5)
     parser.add_argument('--verbose',action='store_true',dest='verbose')
 
+    parser.add_argument('--version', action='version',version=package_version_dict(as_string=True))
+    
     return parser.parse_args(argv)
 
 def getmaskcomps(dataimg,maskimg,maskconfounds,ncomp,mask_threshold,blocksize=200):

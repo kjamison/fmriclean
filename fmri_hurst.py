@@ -17,6 +17,8 @@ def argument_parse(argv):
     parser.add_argument('--allowsubsegmentoverlap',action='store_true',dest='allowoverlap')
     parser.add_argument('--verbose',action='store_true',dest='verbose')
 
+    parser.add_argument('--version', action='version',version=package_version_dict(as_string=True))
+    
     return parser.parse_args(argv)
 
 def flatlist(l):
