@@ -100,6 +100,9 @@ def fmri_alff(argv):
         print("Loaded input file: %s (%dx%d)" % (inputfile,Dt.shape[0],Dt.shape[1]))
         if tr_input:
             tr=tr_input
+            print("RepetitionTime (TR) from input file: %g (seconds)" % (tr))
+        else:
+            print("RepetitionTime (TR) from command-line argument: %g (seconds)" % (tr))
 
         numvols=Dt.shape[0]
     

@@ -6,6 +6,7 @@ from scipy.io import loadmat,savemat
 import os.path
 import re
 from utils import *
+from tqdm import tqdm
 
 def argument_parse(argv):
     parser=argparse.ArgumentParser(description='Voxelwise connectivity strength *after* denoising')
@@ -15,7 +16,7 @@ def argument_parse(argv):
     parser.add_argument('--outbase',action='append',dest='outbase',nargs='*')
     parser.add_argument('--skipvols',action='store',dest='skipvols',type=int,default=5)
     parser.add_argument('--outlierfile',action='append',dest='outlierfile',nargs='*')
-    parser.add_argument('--mask',action='store',dest='maskfile',help='mask over which to compute connectivity strength (eg: gray matter voxels)',nargs='*')
+    parser.add_argument('--mask',action='append',dest='maskfile',help='mask over which to compute connectivity strength (eg: gray matter voxels)',nargs='*')
     parser.add_argument('--cctransform',action='store',dest='cctransform',choices=['none','abs','pos','neg'],default='none')
     parser.add_argument('--outputvolumeformat',action='store',dest='outputvolumeformat',choices=['same','auto','nii','nii.gz'],default='same')
     parser.add_argument('--blocksize',action='store',dest='blocksize',type=int,default=200,help='Block size to limit memory usage (default: 200)')
@@ -147,7 +148,7 @@ def fmri_node_strength(argv):
         elif cctransform_type == 'neg':
             cc_filt_fun=lambda x: np.maximum(-x,0)
         
-        Dcc=np.hstack([np.mean(cc_filt_fun(Dt[:,i:min(i+blocksize,imax)].T@Dt),axis=1) for i in range(0,imax,blocksize)])
+        Dcc=np.hstack([np.mean(cc_filt_fun(Dt[:,i:min(i+blocksize,imax)].T@Dt),axis=1) for i in tqdm(range(0,imax,blocksize))])
         Dcc-=1/Dt.shape[1] #subtract the 1/N for each voxel's entry on the diagonal
         Dcc_new=np.zeros(Dt.shape[1])
         Dcc_new[:Dcc.size]=Dcc

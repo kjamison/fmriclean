@@ -94,7 +94,8 @@ def fmri_reorder_parcellated_timeseries(argv):
     for inputinfo in inputstruct_list:
         M=loadmat(inputinfo['file'])
         roivals=M['roi_labels'].flatten()
-        roisizes=M['roi_sizes'].astype(np.float).flatten()
+        #roisizes=M['roi_sizes'].astype(np.float).flatten()
+        roisizes=M['roi_sizes'].astype(float).flatten()
         if Mnew is None:
             Mnew=M.copy()
         
