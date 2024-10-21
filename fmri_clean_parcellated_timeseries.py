@@ -34,8 +34,9 @@ def argument_parse(argv):
     parser.add_argument('--gsr',action='store_true',dest='gsr')
     parser.add_argument('--nocompcor',action='store_true',dest='nocompcor')
     parser.add_argument('--nomotion',action='store_true',dest='nomotion')
+    parser.add_argument('--nohrf',action='store_true',dest='nohrf')
     parser.add_argument('--hrffile',action='store',dest='hrffile')
-    parser.add_argument('--motionparamtype',action='store',dest='mptype',choices=['spm','hcp','fsl'],default='fsl')
+    parser.add_argument('--motionparamtype',action='store',dest='mptype',choices=['spm','hcp','fsl','fmriprep'],default='fsl')
     parser.add_argument('--motionparam',action='append',dest='mpfile',nargs='*')
     parser.add_argument('--outlierfile',action='append',dest='outlierfile',nargs='*')
     parser.add_argument('--shrinkage',action='store',dest='shrinkage',default='0')
@@ -116,6 +117,7 @@ def fmri_clean_parcellated_timeseries(argv):
     do_gsr=args.gsr
     do_nocompcor=args.nocompcor
     do_nomotion=args.nomotion
+    do_nohrf=args.nohrf
     tr=args.tr
     do_savets=args.savets
     do_seqroi=args.sequentialroi
@@ -293,24 +295,7 @@ def fmri_clean_parcellated_timeseries(argv):
     #read in --motionparam inputs if provided, overwriting values from --confoundfile
     if len(movfile_list)==num_inputs:
         for inputidx,movfile in enumerate(movfile_list):
-            mp=np.loadtxt(movfile)
-
-            if movfile_type=="spm":
-                print("Motion file %s is (%d,%d), SPM-style=(xmm,ymm,zmm,radx,rady,radz)" % (movfile,mp.shape[0],mp.shape[1]))
-                #already xmm,ymm,zmm,radx,rady,radz
-                mp=mp[:,:6]
-
-            elif movfile_type=="hcp":
-                print("Motion file %s is (%d,%d), HCP-style=(xmm,ymm,zmm,degx,degy,degz)" % (movfile,mp.shape[0],mp.shape[1]))
-                #convert from xmm,ymm,zmm,degx,degy,degz to rad
-                mp=mp[:,:6]
-                mp[:,3:6]=mp[:,3:6]*np.pi/180
-            elif movfile_type=="fsl":
-                print("Motion file %s is (%d,%d), FSL-style=(radx,rady,radz,xmm,ymm,zmm)" % (movfile,mp.shape[0],mp.shape[1]))
-                #swap mm and rad columns
-                mp=mp[:,[3,4,5,0,1,2]]
-            else:
-                raise Exception("Unknown motion parameter file type: %s" % (movfile_type))
+            mp, mp_names = read_motion_params(movfile, movfile_type)
             confounds_list[inputidx]["mp"]=mp
     
     #read in --outlierfile inputs if provided, overwriting values from --confoundfile
@@ -337,6 +322,9 @@ def fmri_clean_parcellated_timeseries(argv):
             print("Loaded input file: %s (%dx%d)" % (inputfile,Dt.shape[0],Dt.shape[1]))
             if tr_input:
                 tr=tr_input
+                print("RepetitionTime (TR) from input file: %g (seconds)" % (tr))
+            else:
+                print("RepetitionTime (TR) from command-line argument: %g (seconds)" % (tr))
             
             numvols=Dt.shape[0]
             
@@ -390,6 +378,9 @@ def fmri_clean_parcellated_timeseries(argv):
             
             if do_nomotion:
                 mp=np.zeros((numvols,0))
+            
+            if do_nohrf:
+                resteffect=np.zeros((numvols,0))
             
             confounds=np.hstack([onesmat,addderiv(gmreg),wmreg,csfreg,addsquare(addderiv(mp)),addderiv(resteffect),outliermat,detrendmat])
             confounds_to_filter=np.hstack([addderiv(gmreg),wmreg,csfreg,addsquare(addderiv(mp)),addderiv(resteffect)])
@@ -461,15 +452,15 @@ def fmri_clean_parcellated_timeseries(argv):
             
             if do_seqroi:
                 #make full 
-                maxroi=np.max(roivals).astype(np.int)
+                maxroi=np.max(roivals).astype(int)
                 if len(roivals) < sequential_roi_error_size and maxroi > sequential_roi_error_size:
                     raise Exception("Maximum ROI label (%d) exceeded allowable size (%d), suggesting a mistake. If this was intentional, set --sequentialerrorsize" % (maxroi,sequential_roi_error_size))
                 roivals_seq=np.arange(1,maxroi+1)
                 roisizes_seq=np.zeros(maxroi)
-                roisizes_seq[roivals.astype(np.int)-1]=roisizes
+                roisizes_seq[roivals.astype(int)-1]=roisizes
                 
                 Dt_clean_seq=np.zeros((Dt_clean.shape[0],maxroi),dtype=Dt_clean.dtype)
-                Dt_clean_seq[:,roivals.astype(np.int)-1]=Dt_clean
+                Dt_clean_seq[:,roivals.astype(int)-1]=Dt_clean
                 
                 roivals=roivals_seq
                 roisizes=roisizes_seq

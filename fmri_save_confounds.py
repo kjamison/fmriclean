@@ -13,7 +13,7 @@ import os.path
 from utils import *
 
 def argument_parse(argv):
-    parser=argparse.ArgumentParser(description='Create file with confound regressors for denoising')
+    parser=argparse.ArgumentParser(description='Create file with confound regressors for denoising',formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     parser.add_argument('--hcpmnidir',action='store',dest='hcpmnidir',help='Optional: HCP-style MNINonLinear directory to find input files')
     parser.add_argument('--hcpscanname',action='store',dest='hcpscanname',help='Optional: Scan name within MNINonLinear/Results')
@@ -21,13 +21,14 @@ def argument_parse(argv):
     #parser.add_argument('--mask',action='store',dest='maskfile')
     parser.add_argument('--output',action='store',dest='outputfile')
     parser.add_argument('--motionparam',action='store',dest='mpfile')
-    parser.add_argument('--motionparamtype',action='store',dest='mptype',choices=['spm','hcp','fsl'],default='fsl')
+    parser.add_argument('--motionparamtype',action='store',dest='mptype',choices=['spm','hcp','fsl','fmriprep'],default='fsl')
     parser.add_argument('--gmmask',action='store',dest='gmfile',help='gray-matter mask (for global signal regression)')
     parser.add_argument('--wmmask',action='store',dest='wmfile',help='white-matter mask')
     parser.add_argument('--csfmask',action='store',dest='csffile',help='CSF mask')
     parser.add_argument('--ewmmask',action='store',dest='ewmfile',help='white-matter mask ALREADY eroded')
     parser.add_argument('--ecsfmask',action='store',dest='ecsffile',help='CSF mask ALREADY eroded')
     parser.add_argument('--erosionvoxels',action='store',dest='erosionvoxels',type=int,default=1,help='Number of voxels to erode for WM/CSF')
+    parser.add_argument('--maskthreshold',action='store',dest='mask_threshold',type=float,default=0.5, help='Threshold to apply to GM/WM/CSF masks before applying (eg: probseg>thresh)')
     parser.add_argument('--numwmregressors',action='store',dest='num_wm_regressors',type=int,default=5,help='How many regressors from WM?')       
     parser.add_argument('--numcsfregressors',action='store',dest='num_csf_regressors',type=int,default=5,help='How many regressors from CSF?')
     parser.add_argument('--hrffile',action='store',dest='hrffile')
@@ -89,7 +90,7 @@ def fmri_save_confounds(argv):
     num_csfreg=args.num_csf_regressors
     num_wmreg=args.num_wm_regressors
     
-    mask_threshold=0.5
+    mask_threshold=args.mask_threshold
 
     if hcpmnidir and hcpscanname:
         if inputvol is None:
@@ -144,6 +145,7 @@ def fmri_save_confounds(argv):
     else:
         print("CSF volume mask (eroded): %s" % (csffile))
     print("Erosion voxels: %d (%dx%dx%d box)" % (erosionvoxels,erosionvoxels*2+1,erosionvoxels*2+1,erosionvoxels*2+1))
+    print("Mask threshold: %g" % (mask_threshold))
     print("Outlier timepoint file: %s" % (outlierfile))
     print("Consider first N volumes to be outliers: %s" % (skipvols))
     print("Output filename: %s" % (outputfile))
@@ -153,34 +155,15 @@ def fmri_save_confounds(argv):
     tr=D.header['pixdim'][4]
     numvols=D.shape[-1]
 
+    print("RepetitionTime (TR) from input file: %g (seconds)" % (tr))
+    
     #read in motion parameters (HCP saved mmx,mmy,mmz, degx,degy,degz)
     mp_names=[]
     if movfile:
-        mp=np.loadtxt(movfile)
-    
-        if movfile_type=="spm":
-            print("Motion file %s is (%d,%d), SPM-style=(xmm,ymm,zmm,radx,rady,radz)" % (movfile,mp.shape[0],mp.shape[1]))
-            #already xmm,ymm,zmm,radx,rady,radz
-            mp=mp[:,:6]
-
-        elif movfile_type=="hcp":
-            print("Motion file %s is (%d,%d), HCP-style=(xmm,ymm,zmm,degx,degy,degz)" % (movfile,mp.shape[0],mp.shape[1]))
-            #convert from xmm,ymm,zmm,degx,degy,degz to rad
-            mp=mp[:,:6]
-            mp[:,3:6]=mp[:,3:6]*np.pi/180
-        elif movfile_type=="fsl":
-            print("Motion file %s is (%d,%d), FSL-style=(radx,rady,radz,xmm,ymm,zmm)" % (movfile,mp.shape[0],mp.shape[1]))
-            #swap mm and rad columns
-            mp=mp[:,[3,4,5,0,1,2]]
-        else:
-            error("Unknown motion parameter file type: %s" % (movfile_type))
-        
-        #already xmm,ymm,zmm,radx,rady,radz
-        mp_names=["motion.xmm","motion.ymm","motion.zmm","motion.xrad","motion.yrad","motion.zrad"]
+        mp, mp_names = read_motion_params(movfile, movfile_type)
     else:
         mp=np.zeros((numvols,0))
-
-
+    
     if hrffile is None:
         #nipy doesn't work with certain numpy versions, so let's just save it out and interpolate 
         #import nipy.modalities.fmri.hrf

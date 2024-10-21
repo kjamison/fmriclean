@@ -16,6 +16,7 @@ def argument_parse(argv):
     parser.add_argument('--mask',action='store',dest='maskfile')
     parser.add_argument('--roifile',action='append',dest='roifile',help='ROI atlas label volume. can be --roifile myname=myname_parc.nii.gz',nargs='*')
     parser.add_argument('--outbase',action='store',dest='outbase')
+    parser.add_argument('--outsuffix',action='store',dest='outsuffix',default='ts')
     parser.add_argument('--repetitiontime','-tr',action='store',dest='tr',help='TR in seconds (default=read from input)',type=float)
     parser.add_argument('--sequentialroi',action='store_true',dest='sequential',help='Output columns for ALL sequential ROI values from 1:max (otherwise only unique values in ROI volume)')
     parser.add_argument('--sequentialerrorsize',action='store',dest='sequentialerrorsize',type=int,default=1000,help='Throw error if using --sequential and largest ROI label is larger than this')
@@ -32,6 +33,7 @@ def fmri_save_parcellated_timeseries(argv):
     maskfile=args.maskfile
     roifile=args.roifile
     outbase=args.outbase
+    outsuffix=args.outsuffix
     outputformat=args.outputformat
     do_seqroi=args.sequential
     input_tr=args.tr
@@ -59,10 +61,15 @@ def fmri_save_parcellated_timeseries(argv):
     tr=D.header['pixdim'][4]
     if tr <=0 and input_tr > 0:
         tr=input_tr
+        print("RepetitionTime (TR) from command-line argument: %g (seconds)" % (tr))
+    else:
+        print("RepetitionTime (TR) from input file: %g (seconds)" % (tr))
     if D.ndim < 4:
         numvols=1
     else:
         numvols=D.shape[-1]
+    
+    
 
     if maskfile:
         goodvox=nib.load(maskfile)
@@ -167,11 +174,11 @@ def fmri_save_parcellated_timeseries(argv):
 
             
         if outputformat == "mat":
-            savemat(outbase+roisuffix+"_ts.mat",{"ts":Dparc,"roi_labels":roivals,"roi_sizes":roisizes,"repetition_time":tr},format='5',do_compression=True)
+            savemat(outbase+roisuffix+"_%s.mat" % (outsuffix),{"ts":Dparc,"roi_labels":roivals,"roi_sizes":roisizes,"repetition_time":tr},format='5',do_compression=True)
         else:
-            np.savetxt(outbase+roisuffix+"_ts.txt",Dparc,fmt="%.18f",header=roiheadertxt,comments="# ")
+            np.savetxt(outbase+roisuffix+"_%s.txt" % (outsuffix),Dparc,fmt="%.18f",header=roiheadertxt,comments="# ")
 
-        print("Saved %s_ts.%s [%dx%d]" % (outbase+roisuffix,outputformat,Dparc.shape[0],Dparc.shape[1]))
+        print("Saved %s_%s.%s [%dx%d]" % (outbase+roisuffix,outsuffix,outputformat,Dparc.shape[0],Dparc.shape[1]))
 
 if __name__ == "__main__":
     fmri_save_parcellated_timeseries(sys.argv[1:])

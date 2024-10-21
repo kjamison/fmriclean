@@ -2,7 +2,10 @@ import numpy as np
 import nibabel as nib
 from scipy.io import loadmat,savemat
 import scipy.signal, scipy.interpolate
+import sys
 import os.path
+import pandas as pd
+
 
 def flatlist(l):
     if l is None:
@@ -99,7 +102,7 @@ def nanfft(S,tr,outliermat=None,inverse=False):
         
     #build FFT basis set
     n=np.atleast_2d(np.arange(N))
-    X=np.zeros((N,N),dtype=np.complex)
+    X=np.zeros((N,N),dtype=complex)
     for k in range(N):
         X[k,:]=np.exp(expsign*1j*2*np.pi*k*n/N)
         
@@ -391,3 +394,45 @@ def params2matrix(P):
     R   = R1*R2*R3;
 
     return T * R
+
+def read_motion_params(movfile, movfile_type):
+    #read in motion parameters (HCP saved mmx,mmy,mmz, degx,degy,degz)
+    if not movfile:
+        raise Exception("Motion parameter file not specified")
+    
+    if movfile_type=="spm":
+        mp=np.loadtxt(movfile)
+        print("Motion file %s is (%d,%d), SPM-style=(xmm,ymm,zmm,radx,rady,radz)" % (movfile,mp.shape[0],mp.shape[1]))
+        #already xmm,ymm,zmm,radx,rady,radz
+        mp=mp[:,:6]
+
+    elif movfile_type=="hcp":
+        mp=np.loadtxt(movfile)
+        print("Motion file %s is (%d,%d), HCP-style=(xmm,ymm,zmm,degx,degy,degz)" % (movfile,mp.shape[0],mp.shape[1]))
+        #convert from xmm,ymm,zmm,degx,degy,degz to rad
+        mp=mp[:,:6]
+        mp[:,3:6]=mp[:,3:6]*np.pi/180
+    elif movfile_type=="fsl":
+        mp=np.loadtxt(movfile)
+        print("Motion file %s is (%d,%d), FSL-style=(radx,rady,radz,xmm,ymm,zmm)" % (movfile,mp.shape[0],mp.shape[1]))
+        #swap mm and rad columns
+        mp=mp[:,[3,4,5,0,1,2]]
+    elif movfile_type=="fmriprep":
+        mp_dataframe=pd.read_table(movfile)
+        print("Motion file %s is (%d,%d), fMRIPrep-style=(trans_[xyz],rot_[xyz])=(xmm,ymm,zmm,radx,rady,radz)" % (movfile,mp_dataframe.shape[0],mp_dataframe.shape[1]))
+        mp=np.stack([
+            mp_dataframe['trans_x'],
+            mp_dataframe['trans_y'],
+            mp_dataframe['trans_z'], 
+            mp_dataframe['rot_x'], 
+            mp_dataframe['rot_y'],
+            mp_dataframe['rot_z']
+            ],axis=-1)
+    else:
+        raise Exception("Unknown motion parameter file type: %s" % (movfile_type))
+    
+    #already xmm,ymm,zmm,radx,rady,radz
+    mp_names=["motion.xmm","motion.ymm","motion.zmm","motion.xrad","motion.yrad","motion.zrad"]
+    
+    return mp, mp_names
+

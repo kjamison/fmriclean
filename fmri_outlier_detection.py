@@ -3,14 +3,14 @@ import numpy as np
 import sys
 import argparse
 from pathlib import Path 
-from utils import prepadZero, params2matrix
+from utils import prepadZero, params2matrix, read_motion_params
 
 def argument_parse(argv):
     parser=argparse.ArgumentParser(description='ART-style outlier detection on motion-corrected fMRI time series and motion parameter estimates')
 
     parser.add_argument('--input','-i',action='store',dest='inputvol')
     parser.add_argument('--motionparam','-p',action='store',dest='mpfile')
-    parser.add_argument('--motionparamtype','-pt',action='store',dest='mptype',choices=['spm','hcp','fsl'])
+    parser.add_argument('--motionparamtype','-pt',action='store',dest='mptype',choices=['spm','hcp','fsl','fmriprep'])
     parser.add_argument('--mask','-m',action='store',dest='maskvol',help='If not provided, compute mask automatically from time series')
     parser.add_argument('--output','-o',action='store',dest='outfile')
     parser.add_argument('--outputparams','-op',action='store',dest='outfile_params',help='Can be .mat (matlab format) or .txt')
@@ -129,24 +129,8 @@ def fmri_outlier_detection(argv):
         print("Computed mask contains %d voxels" % (np.sum(M)))
 
     #read in motion parameters (HCP saved mmx,mmy,mmz, degx,degy,degz)
-    mp=np.loadtxt(movfile)
-    if movfile_type=="spm":
-        print("Motion file %s is (%d,%d), SPM-style=(xmm,ymm,zmm,radx,rady,radz)" % (movfile,mp.shape[0],mp.shape[1]))
-        #already xmm,ymm,zmm,radx,rady,radz
-        mp=mp[:,:6]
-
-    elif movfile_type=="hcp":
-        print("Motion file %s is (%d,%d), HCP-style=(xmm,ymm,zmm,degx,degy,degz)" % (movfile,mp.shape[0],mp.shape[1]))
-        #convert from xmm,ymm,zmm,degx,degy,degz to rad
-        mp=mp[:,:6]
-        mp[:,3:6]=mp[:,3:6]*np.pi/180
-    elif movfile_type=="fsl":
-        print("Motion file %s is (%d,%d), FSL-style=(radx,rady,radz,xmm,ymm,zmm)" % (movfile,mp.shape[0],mp.shape[1]))
-        #swap mm and rad columns
-        mp=mp[:,[3,4,5,0,1,2]]
-    else:
-        error("Unknown motion parameter file type: %s" % (movfile_type))
-
+    mp, mp_names = read_motion_params(movfile, movfile_type)
+    
     mp=mp[exclude_vols:,:]
     
     #############################
