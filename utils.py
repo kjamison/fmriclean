@@ -447,7 +447,9 @@ def read_motion_params(movfile, movfile_type):
 def save_connmatrix(filename_noext,outputformat,output_dict):
     outfilename=""
     shapestring="%dx%d" % (output_dict["C"].shape[0],output_dict["C"].shape[1])
-    if outputformat == "mat":
+    if outputformat.startswith("."):
+        outputformat=outputformat[1:]
+    if outputformat.lower().endswith("mat"):
         outfilename=filename_noext+"."+outputformat
         savemat(outfilename,output_dict,format='5',do_compression=True)
     else:
@@ -467,9 +469,9 @@ def load_connmatrix(filename):
     if filename.lower().endswith(".mat"):
         M=loadmat(filename,simplify_cells=True)
         mfield_data_search=['C','FC','data']
-        mfield_data_earch=[x.upper() for x in mfield_data_search]
-        for m in mfield_data_search:
-            if m in M:
+        mfield_data_search=[x.upper() for x in mfield_data_search]
+        for m in M:
+            if m.upper() in mfield_data_search:
                 conn_dict['C']=M[m]
                 break
         mfield_search=['roi_labels','roi_sizes','cov_estimator','shrinkage']
@@ -495,6 +497,16 @@ def load_connmatrix(filename):
                 conn_dict['shrinkage']=float(l.split(":")[-1].strip())
             
         conn_dict['C']=np.loadtxt(filename,comments='#')
+    
+    if 'roi_labels' in conn_dict and len(conn_dict['roi_labels']) == conn_dict['C'].shape[0]:
+        roiidx=np.array(conn_dict['roi_labels'],dtype=int)-1
+        Cnew=np.zeros([max(roiidx)+1,max(roiidx)+1])
+        d=np.median(np.diag(conn_dict['C']))
+        np.fill_diagonal(Cnew,d)
+        Cnew[roiidx[:,None],roiidx]=conn_dict['C']
+        conn_dict['C']=Cnew
+        conn_dict['roi_labels']=np.arange(1,max(roiidx)+1)
+    
     return conn_dict
 
 def get_version(include_date=False):

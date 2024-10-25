@@ -18,11 +18,16 @@ def argument_parse(argv):
     parser.add_argument('--outbase',action='store',dest='outbase')
     parser.add_argument('--outsuffix',action='store',dest='outsuffix',default='ts')
     parser.add_argument('--repetitiontime','-tr',action='store',dest='tr',help='TR in seconds (default=read from input)',type=float)
-    parser.add_argument('--sequentialroi',action='store_true',dest='sequential',help='Output columns for ALL sequential ROI values from 1:max (otherwise only unique values in ROI volume)')
+    
+    #keep this only for legacy.... this is the default
+    parser.add_argument('--sequentialroi',action='store_true',dest='sequential',default=True,help='THIS IS THE DEFAULT. Output columns for ALL sequential ROI values from 1:max (otherwise only unique values in ROI volume)')
+    #this is the new option to DISABLE sequential ROIs
+    parser.add_argument('--nonsequentialroi','--uniqueroi',action='store_true',dest='nonsequential',help='Only save timeseries for unique values in ROI volume (not 1:max)')
+    
     parser.add_argument('--sequentialerrorsize',action='store',dest='sequentialerrorsize',type=int,default=1000,help='Throw error if using --sequential and largest ROI label is larger than this')
     parser.add_argument('--outputformat',action='store',dest='outputformat',choices=['mat','txt'],default='mat')
     parser.add_argument('--verbose',action='store_true',dest='verbose')
-
+    
     parser.add_argument('--version', action='version',version=package_version_dict(as_string=True))
     
     return parser.parse_args(argv)
@@ -37,13 +42,11 @@ def fmri_save_parcellated_timeseries(argv):
     outbase=args.outbase
     outsuffix=args.outsuffix
     outputformat=args.outputformat
-    do_seqroi=args.sequential
+    do_seqroi=args.sequential and not args.nonsequential
     input_tr=args.tr
-
     sequential_error_size=args.sequentialerrorsize
     verbose=args.verbose
-
-
+    
     roifile=flatlist([x.split(",") for x in flatlist(roifile)])
 
     if hcpmnidir and hcpscanname:
