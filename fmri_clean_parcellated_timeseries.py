@@ -45,23 +45,6 @@ def argument_parse(argv):
     
     return parser.parse_args(argv)
 
-def save_connmatrix(filename_noext,outputformat,output_dict):
-    outfilename=""
-    shapestring="%dx%d" % (output_dict["C"].shape[0],output_dict["C"].shape[1])
-    if outputformat == "mat":
-        outfilename=filename_noext+"."+outputformat
-        savemat(outfilename,output_dict,format='5',do_compression=True)
-    else:
-        headertxt="ROI_Labels:\n"
-        headertxt+=" ".join(["%d" % (x) for x in output_dict["roi_labels"]])
-        headertxt+="\nROI_Sizes(voxels):\n"
-        headertxt+=" ".join(["%d" % (x) for x in output_dict["roi_sizes"]])
-        headertxt+="\nCovariance_estimator: %s" % (output_dict["cov_estimator"])
-        headertxt+="\nCovariance_shrinkage: %s" % (output_dict["cov_shrinkage"])
-        outfilename=filename_noext+"."+outputformat
-        np.savetxt(outfilename,output_dict["C"],fmt="%.18f",header=headertxt,comments="# ")
-    return outfilename, shapestring
-            
 def compute_connmatrix(ts,conntype,input_shrinkage="lw"):
     if input_shrinkage.lower() == "lw":
         covest=sklearn.covariance.LedoitWolf()
