@@ -20,12 +20,12 @@ def argument_parse_reginv(argv):
     #option 3: --combinedinput with a single input file containing all subjects
 
     input_group=parser.add_argument_group('FC input options')
-    input_group.add_argument('--inputpattern',action='store',dest='inputpattern')
-    input_group.add_argument('--subjects',action='append',dest='subjectlist',nargs='*')
-    input_group.add_argument('--subjectfile',action='store',dest='subjectfile')
+    input_group.add_argument('--inputpattern',action='store',dest='inputpattern',help='Input filename pattern with {subject} placeholders. Eg "myfolder/{subject}_FC.mat"')
+    input_group.add_argument('--input','--inputs',action='append',dest='inputlist',nargs='*',help='List of input files')
+    input_group.add_argument('--combinedinput',action='store',dest='combinedinput',help='Single .mat input file containing all subjects, with "C" field with cell array of connectivity data for each subject')
     
-    input_group.add_argument('--input','--inputs',action='append',dest='inputlist',nargs='*')
-    input_group.add_argument('--combinedinput',action='store',dest='combinedinput',help='Single input file containing all subjects')
+    input_group.add_argument('--subjects',action='append',dest='subjectlist',nargs='*',help='List of subject IDs for inputpattern OR to  be used to subset combinedinput')
+    input_group.add_argument('--subjectfile',action='store',dest='subjectfile',help='plaintext (or .mat with "subject" field) with list of subject IDs for inputpatternor to subset combinedinput')
     
     reg_group=parser.add_argument_group('Regularization options')
     reg_group.add_argument('--lambda_range',action='store',dest='lambda_range',nargs=2,type=float,default=[0,1],help='Range of lambda values to search')
@@ -60,6 +60,23 @@ def reginv_load_inputs(combinedinput_arg=None, inputpattern=None, subjectlist_ar
     
     input_info={}
     
+    subjectlist=[]
+    if subjectfile:
+        if reginv_file_extension(subjectfile)=='.mat':
+            Msubj=loadmat(subjectfile,simplify_cells=True)
+            if 'subject' in Msubj:
+                subjectlist=[s for s in Msubj['subject']]
+            elif 'subjects' in Msubj:
+                subjectlist=[s for s in Msubj['subjects']]
+            else:
+                raise Exception("No subject list found in %s. Must include field 'subject' or 'subjects'" % (subjectfile))
+        else:
+            with open(subjectfile,'r') as fid:
+                subjectlist=[x.strip() for x in fid.readlines]
+    elif subjectlist_arg:
+        subjectlist=[s for s in subjectlist_arg]
+    subjectlist=[str(s) for s in subjectlist] #in case some parsing turned them into integers
+                
     if combinedinput_arg:
         if reginv_file_extension(combinedinput_arg) != '.mat':
             raise Exception("Combined input must be a .mat file")
@@ -82,32 +99,31 @@ def reginv_load_inputs(combinedinput_arg=None, inputpattern=None, subjectlist_ar
             if k == mfield:
                 continue
             M_allsubj[k]=M[k]
-                
+        
+        if subjectlist:
+            msubjfield=None
+            if 'subject' in M_allsubj:
+                msubjfield='subject'
+            elif 'subjects' in M_allsubj:
+                msubjfield='subjects'
+            if msubjfield:
+                M_allsubj[msubjfield]=[str(s) for s in M_allsubj[msubjfield]] #in case some parsing turned them into integers
+                #filter out subjects not in subjectlist
+                subjmask=[s in subjectlist for s in M_allsubj[msubjfield]]
+                for k in M_allsubj:
+                    if k.startswith("__"):
+                        continue
+                    if len(M_allsubj[k])==len(subjmask):
+                        M_allsubj[k]=[M_allsubj[k][i] for i in range(len(subjmask)) if subjmask[i]]
+                          
         input_info['combined_input_file']=combinedinput_arg
     else:
         inputlist=[]
-        subjectlist=[]
         if inputpattern:
             inputpattern=re.sub('\{(s|subj|subject)\}','{SUBJECT}',inputpattern,flags=re.IGNORECASE)
-            subjectlist=[]
-            if subjectfile:
-                if reginv_file_extension(subjectfile)=='.mat':
-                    Msubj=loadmat(subjectfile,simplify_cells=True)
-                    if 'subject' in Msubj:
-                        subjectlist=[s for s in Msubj['subject']]
-                    elif 'subjects' in Msubj:
-                        subjectlist=[s for s in Msubj['subjects']]
-                    else:
-                        raise Exception("No subject list found in %s. Must include field 'subject' or 'subjects'" % (subjectfile))
-                else:
-                    with open(subjectfile,'r') as fid:
-                        subjectlist=[x.strip() for x in fid.readlines]
-            elif subjectlist_arg:
-                subjectlist=[s for s in subjectlist_arg]
-            else:
+            if not subjectlist:
                 raise Exception("Must specify --subjects or --subjectfile with --inputpattern")
             
-            subjectlist=[str(s) for s in subjectlist]
             inputlist=[inputpattern.format(SUBJECT=s) for s in subjectlist]
         elif inputlist_arg:
             inputlist=[s for s in inputlist_arg]
@@ -127,7 +143,7 @@ def reginv_load_inputs(combinedinput_arg=None, inputpattern=None, subjectlist_ar
 
 
 def reginv_save_outputs(M_allsubj, input_info, output_suffix='_new', reg_info_dict={}):
-    if input_info['combined_input_file']:
+    if 'combined_input_file' in input_info:
         if reginv_file_extension(input_info['combined_input_file'])=='.mat':
             outname=input_info['combined_input_file'][:-4]+output_suffix+'.mat'
         else:
@@ -269,7 +285,7 @@ def run_fmri_regularized_inverse(argv):
     inputlist_arg=flatarglist(args.inputlist)
     combinedinput_arg=args.combinedinput
     
-    output_unreg_precision_arg=args.output_unreg_precision
+    output_unreg_precision_arg=args.output_target_precision
     target_precision_arg=args.target_precision
     
     output_fig_filename=args.outputfig
@@ -293,6 +309,7 @@ def run_fmri_regularized_inverse(argv):
     M_allsubj, input_info=reginv_load_inputs(combinedinput_arg, inputpattern, subjectlist_arg, subjectfile, inputlist_arg)
     subject_count=len(M_allsubj['C'])
     C_shape=M_allsubj['C'][0].shape
+    print("Loaded input data (%d subjects, %dx%d)" % (subject_count,C_shape[0],C_shape[1]))
     
     target_precision=None
     #if target precision matrix was provided, just load it
