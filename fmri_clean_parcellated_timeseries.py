@@ -4,7 +4,12 @@ import nilearn.connectome
 import sys
 import argparse
 from scipy.io import loadmat,savemat
-import scipy.signal, scipy.interpolate
+import scipy.interpolate
+try:
+    from scipy.signal import gaussian as scipy_gaussian
+except ImportError:
+    #new scipy moved gaussian to .windows
+    from scipy.signal.windows import gaussian as scipy_gaussian
 import sklearn
 
 from utils import *
@@ -372,7 +377,7 @@ def fmri_clean_parcellated_timeseries(argv):
             if do_filter_rolloff:
                 filter_edge_rolloff_size=int(36/tr/2)*2+1 #51 for tr=0.72
                 filter_edge_rolloff_std=3.6/tr #5 for tr=0.72
-                filter_edge_rolloff=scipy.signal.gaussian(filter_edge_rolloff_size,filter_edge_rolloff_std)
+                filter_edge_rolloff=scipy_gaussian(filter_edge_rolloff_size,filter_edge_rolloff_std)
             else:
                 filter_edge_rolloff=None
             
