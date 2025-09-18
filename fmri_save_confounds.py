@@ -7,6 +7,7 @@ import argparse
 from scipy.ndimage import binary_erosion
 from scipy.io import savemat
 import scipy.interpolate
+import pandas as pd
 
 import os.path
 
@@ -33,6 +34,7 @@ def argument_parse(argv):
     parser.add_argument('--numcsfregressors',action='store',dest='num_csf_regressors',type=int,default=5,help='How many regressors from CSF?')
     parser.add_argument('--hrffile',action='store',dest='hrffile')
     parser.add_argument('--outlierfile',action='store',dest='outlierfile')
+    parser.add_argument('--outlierfile_fmriprep',action='store',dest='outlierfile_fmriprep',help='confounds_timeseries.tsv from fmriprep. will use all columns with "outlier" in the name')
     parser.add_argument('--skipvols',action='store',dest='skipvols',type=int,default=5)
     parser.add_argument('--verbose',action='store_true',dest='verbose')
 
@@ -77,6 +79,7 @@ def fmri_save_confounds(argv):
     movfile=args.mpfile
     movfile_type=args.mptype.lower()
     outlierfile=args.outlierfile
+    outlierfile_fmriprep=args.outlierfile_fmriprep
     skipvols=args.skipvols
     outputfile=args.outputfile
     erosionvoxels=args.erosionvoxels
@@ -148,11 +151,13 @@ def fmri_save_confounds(argv):
         print("CSF volume mask (eroded): %s" % (csffile))
     print("Erosion voxels: %d (%dx%dx%d box)" % (erosionvoxels,erosionvoxels*2+1,erosionvoxels*2+1,erosionvoxels*2+1))
     print("Mask threshold: %g" % (mask_threshold))
-    print("Outlier timepoint file: %s" % (outlierfile))
+    if outlierfile_fmriprep:
+        print("Outlier timepoint file (fmriprep): %s" % (outlierfile_fmriprep))
+    else:
+        print("Outlier timepoint file: %s" % (outlierfile))
     print("Consider first N volumes to be outliers: %s" % (skipvols))
     print("Output filename: %s" % (outputfile))
-
-
+    
     D=nib.load(inputvol)
     tr=D.header['pixdim'][4]
     numvols=D.shape[-1]
@@ -214,7 +219,11 @@ def fmri_save_confounds(argv):
             ewmimg=nib.load(wmfile)
 
 
-    if outlierfile:
+    if outlierfile_fmriprep:
+        df_fmriprep=pd.read_table(outlierfile_fmriprep)
+        outmat=np.vstack([df_fmriprep[k] for k in df_fmriprep.keys() if "outlier" in k]).T
+        outliervec=np.sum(outmat,axis=1,keepdims=False)>0
+    elif outlierfile:
         outliervec=np.loadtxt(outlierfile)>0
     else:
         outliervec=np.zeros((numvols,1))>0
