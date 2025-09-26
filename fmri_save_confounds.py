@@ -221,8 +221,12 @@ def fmri_save_confounds(argv):
 
     if outlierfile_fmriprep:
         df_fmriprep=pd.read_table(outlierfile_fmriprep)
-        outmat=np.vstack([df_fmriprep[k] for k in df_fmriprep.keys() if "outlier" in k]).T
-        outliervec=np.sum(outmat,axis=1,keepdims=False)>0
+        outmat=[df_fmriprep[k] for k in df_fmriprep.keys() if "outlier" in k]
+        if len(outmat)==0:
+            outliervec=np.zeros((numvols,1))>0
+        else:
+            outmat=np.vstack(outmat).T
+            outliervec=np.sum(outmat,axis=1,keepdims=False)>0
     elif outlierfile:
         outliervec=np.loadtxt(outlierfile)>0
     else:
