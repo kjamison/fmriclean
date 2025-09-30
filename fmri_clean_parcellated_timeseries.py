@@ -46,6 +46,7 @@ def argument_parse(argv):
     parser.add_argument('--concat',action='store_true',dest='concat',help='Concatenate time series when multiple --input or --inputpattern are given (need multiple --confound in this case as well)')
     parser.add_argument('--verbose',action='store_true',dest='verbose')
     
+    parser.add_argument('--concatstorefullpath',action='store_true',dest='concat_store_full_path',help='Store full path of input files when using --concat (default: just store filenames without directories)')
     parser.add_argument('--version', action='version',version=package_version_dict(as_string=True))
     
     return parser.parse_args(argv)
@@ -111,6 +112,8 @@ def fmri_clean_parcellated_timeseries(argv):
     do_concat=args.concat
     input_shrinkage=args.shrinkage
     hrffile=args.hrffile
+    
+    do_concat_store_full_path=args.concat_store_full_path
     
     if not connmeasure:
         connmeasure=['correlation']
@@ -295,6 +298,7 @@ def fmri_clean_parcellated_timeseries(argv):
     # main loop
     for roiname in roiname_list:
         outlier_free_data_list=[]
+        inputfile_concat_list=[]
         for inputidx,inputitem in enumerate(input_list):
             confounds_dict=confounds_list[inputidx]
         
@@ -478,6 +482,7 @@ def fmri_clean_parcellated_timeseries(argv):
             
             if do_concat:
                 outlier_free_data_list+=[Dt_clean_outlierfree]
+                inputfile_concat_list+=[inputfile]
             else:
                 for cm in connmeasure:
                     if cm == 'none':
@@ -508,7 +513,8 @@ def fmri_clean_parcellated_timeseries(argv):
         #concatenate multiple scans 
         input_shape_list=[x.shape for x in outlier_free_data_list]
         Dt_clean_outlierfree=np.vstack(outlier_free_data_list)
-        
+        if not do_concat_store_full_path:
+            inputfile_concat_list=[os.path.basename(f) for f in inputfile_concat_list]
         for cm in connmeasure:
             if cm == 'none':
                 continue
@@ -519,6 +525,7 @@ def fmri_clean_parcellated_timeseries(argv):
             
             Cdict={"C":C,"roi_labels":roivals,"roi_sizes":roisizes,"shrinkage":shrinkage,'cov_estimator':covest_class}
             Cdict['input_shape_list']=input_shape_list
+            Cdict['input_file_list']=inputfile_concat_list
             savedfilename, shapestring = save_connmatrix(outbase_list[0]+roisuffix+gsrsuffix+"_FC%s" % (connmeasure_shortname[cm]),outputformat,Cdict)
             print("Saved %s (%s)" % (savedfilename,shapestring))
     ######################################
