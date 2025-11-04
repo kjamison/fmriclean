@@ -188,7 +188,7 @@ def invert_tikhonov(C,lam):
     return np.linalg.inv(C+(lam*np.trace(C)/C.shape[0])*np.eye(C.shape[0]))
 
 def prec2pcorr(Cprec):
-    dsqrt=np.diag(np.sqrt(np.diag(np.abs(Cprec))))
+    dsqrt=np.diag(1/np.sqrt(np.diag(np.abs(Cprec))))
     Cpcorr=dsqrt @ (-Cprec) @ dsqrt
     np.fill_diagonal(Cpcorr,0)
     return Cpcorr
