@@ -40,6 +40,7 @@ def argument_parse_reginv(argv):
     output_group=parser.add_argument_group('Output options')
     output_group.add_argument('--output_target_precision',action='store',dest='output_target_precision',help='Output unregularized mean precision matrix (as target for others), then exit')
     output_group.add_argument('--outputfig',action='store',dest='outputfig',help='Output filename for lambda search plot')
+    output_group.add_argument('--outputsuffix',action='store',dest='output_suffix',help='Additional suffix to add to output. e.g., <basename><suffix>_FCpcorr.mat')
     output_group.add_argument('--saveprec',action='store_true')
     output_group.add_argument('--savepcorr',action='store_true')
     
@@ -290,6 +291,8 @@ def run_fmri_regularized_inverse(argv):
     
     output_fig_filename=args.outputfig
     
+    output_suffix=args.output_suffix
+    
     #######
     lambda_range=args.lambda_range
     lambda_steps=args.lambda_steps
@@ -391,12 +394,12 @@ def run_fmri_regularized_inverse(argv):
     
     if args.saveprec:
         reg_info_dict={'cov_estimator':'precision','lambda':lambda_opt, 'lambda_raw':lambda_opt_raw}
-        reginv_save_outputs(M_allsubj, input_info, output_suffix='_FCprec', reg_info_dict=reg_info_dict)
+        reginv_save_outputs(M_allsubj, input_info, output_suffix=output_suffix+'_FCprec', reg_info_dict=reg_info_dict)
     
     if args.savepcorr:
         M_allsubj['C']=[prec2pcorr(C) for C in M_allsubj['C']]
         reg_info_dict={'cov_estimator':'partialcorrelation','lambda':lambda_opt, 'lambda_raw':lambda_opt_raw}
-        reginv_save_outputs(M_allsubj, input_info, output_suffix='_FCpcorr', reg_info_dict=reg_info_dict)
+        reginv_save_outputs(M_allsubj, input_info, output_suffix=output_suffix+'_FCpcorr', reg_info_dict=reg_info_dict)
     
 if __name__ == "__main__":
     run_fmri_regularized_inverse(sys.argv[1:])
