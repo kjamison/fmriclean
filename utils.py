@@ -193,7 +193,7 @@ def get_first_volume_3D(voldata):
     else:
         return voldata
 
-def load_input(filename):
+def load_input(filename, mask=None):
     tr=None
     volinfo=None
     roivals=None
@@ -231,7 +231,10 @@ def load_input(filename):
             if time_axis < 0 or time_axis > 1:
                 raise Exception("Unknown time axis: %d. Should be 0 or 1" % (time_axis))
             
-            M=np.any(np.abs(V)>eps,axis=time_axis)
+            M=mask
+            if mask is None:
+                M=np.any(np.abs(V)>eps,axis=time_axis)
+            
             if time_axis == 0:
                 Dt=V[:,M>0]
             elif time_axis == 1:
@@ -244,13 +247,16 @@ def load_input(filename):
                 tr=0
         else:
             #read normal nifti
+            M=mask
             if Vimg.ndim > 3:
-                M=np.any(np.abs(V)>eps,axis=3)
+                if mask is None:
+                    M=np.any(np.abs(V)>eps,axis=3)
                 Dt=V[M>0].T
                 tr=Vimg.header['pixdim'][4]
                 time_axis=3
             else:
-                M=np.abs(V)>eps
+                if mask is None:
+                    M=np.abs(V)>eps
                 Dt=V[M>0].T
                 tr=Vimg.header['pixdim'][4]
                 time_axis=3
@@ -418,11 +424,20 @@ def read_motion_params(movfile, movfile_type):
         #convert from xmm,ymm,zmm,degx,degy,degz to rad
         mp=mp[:,:6]
         mp[:,3:6]=mp[:,3:6]*np.pi/180
+        
     elif movfile_type=="fsl":
         mp=np.loadtxt(movfile)
         print("Motion file %s is (%d,%d), FSL-style=(radx,rady,radz,xmm,ymm,zmm)" % (movfile,mp.shape[0],mp.shape[1]))
         #swap mm and rad columns
         mp=mp[:,[3,4,5,0,1,2]]
+
+    elif movfile_type=="ants":
+        mp=np.loadtxt(movfile,delimiter=",",skiprows=1)
+        print("Motion file %s is (%d,%d), ANTS-style=(_,_,radx,rady,radz,xmm,ymm,zmm)" % (movfile,mp.shape[0],mp.shape[1]))
+        mp=mp[:,2:]
+        #swap mm and rad columns
+        mp=mp[:,[3,4,5,0,1,2]]
+    
     elif movfile_type=="fmriprep":
         mp_dataframe=pd.read_table(movfile)
         print("Motion file %s is (%d,%d), fMRIPrep-style=(trans_[xyz],rot_[xyz])=(xmm,ymm,zmm,radx,rady,radz)" % (movfile,mp_dataframe.shape[0],mp_dataframe.shape[1]))
