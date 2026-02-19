@@ -9,8 +9,8 @@ def argument_parse(argv):
     parser=argparse.ArgumentParser(description='ART-style outlier detection on motion-corrected fMRI time series and motion parameter estimates')
 
     parser.add_argument('--input','-i',action='store',dest='inputvol')
-    parser.add_argument('--motionparam','-p',action='store',dest='mpfile')
-    parser.add_argument('--motionparamtype','-pt',action='store',dest='mptype',choices=['spm','hcp','fsl','fmriprep'])
+    parser.add_argument('--motionparam','--motionparams','-p',action='store',dest='mpfile')
+    parser.add_argument('--motionparamtype','--motionparamstype','-pt',action='store',dest='mptype',choices=['spm','hcp','fsl','fmriprep'])
     parser.add_argument('--mask','-m',action='store',dest='maskvol',help='If not provided, compute mask automatically from time series')
     parser.add_argument('--output','-o',action='store',dest='outfile')
     parser.add_argument('--outputparams','-op',action='store',dest='outfile_params',help='Can be .mat (matlab format) or .txt')
@@ -25,6 +25,8 @@ def argument_parse(argv):
     parser.add_argument('--connloose',action='store_true',dest='connloose',help='(use CONN toolbox loose parameters: -gt 9 -mt 2 -mc -gd -md)')
     parser.add_argument('--excludevols','-ex',action='store',dest='excludevols',type=int,default=0,help='Number of volumes to AUTOMATICALLY mark as outliers at start of scan')
     
+    parser.add_argument('--inputparams','-ip',action='store',dest='infile_params',help='Use previous outlier_params, but apply new thresholds. Can be .mat (matlab format) or .txt')
+    
     parser.add_argument('--version', action='version',version=package_version_dict(as_string=True))
     
     return parser.parse_args(argv)
@@ -34,11 +36,13 @@ def fmri_outlier_detection(argv):
 
     tsfile=args.inputvol
     movfile=args.mpfile
-    movfile_type=args.mptype.lower()
+    movfile_type=args.mptype
     maskfile=args.maskvol
     outfile=args.outfile
     outfile_params=args.outfile_params
     exclude_vols=args.excludevols
+    
+    infile_params=args.infile_params
 
     if args.connstandard:
         print("Using CONN toolbox standard parameters")
@@ -83,148 +87,217 @@ def fmri_outlier_detection(argv):
         print("Rotation threshold (rad): %g" % (rot_thresh))
         print("Motion outlier mode: All 6 parameters considered independently")
     
-    Vimg=nib.load(tsfile)
-    print("Input volume %s is (%d,%d,%d,%d)" % (tsfile,Vimg.shape[0],Vimg.shape[1],Vimg.shape[2],Vimg.shape[3]))
-
-    #V=Vimg.get_fdata(dtype=np.float32,caching='unchanged')[:,:,:,exclude_vols:]
-
-    if maskfile:
-        Maskimg=nib.load(maskfile)
-        M=Maskimg.get_fdata()>0
-        #keep only the masked voxels
-        #V=V[M>0]
-        blocksize=200
-        maskedmean=np.zeros(Vimg.shape[3],dtype=np.float32)
-        maskedmedian=np.zeros(Vimg.shape[3],dtype=np.float32) #need this so we can approximate np.median(V[M]) later
-        dvars_orig=np.zeros(Vimg.shape[3],dtype=np.float32)
-    
-        #V=np.zeros((np.sum(M),Vimg.shape[3]),dtype=np.float32)
-    
-        Vblock=np.zeros((np.sum(M),blocksize),dtype=np.float32)
-        for i in range(0,Vimg.shape[3],blocksize):
-            blockstop=min(i+blocksize,Vimg.shape[3])
-            #V[:,i:blockstop]=Vimg.slicer[...,i:blockstop].get_fdata(dtype=np.float32,caching="unchanged")[M]
-            vprev=Vblock[:,-1][:,None] #rotate last timepoint of previous block to front of this block
-            Vblock=Vimg.slicer[...,i:blockstop].get_fdata(dtype=np.float32,caching="unchanged")[M]
-            maskedmean[i:blockstop]=np.mean(Vblock,axis=0)
-            maskedmedian[i:blockstop]=np.median(Vblock,axis=0)
-            dvars_orig[i:blockstop]=np.mean(np.diff(np.hstack([vprev,Vblock]),axis=1)**2,axis=0)
-        dvars_orig=dvars_orig[1:]
-        dvars_orig=np.sqrt(dvars_orig)
-    
-        dvars_orig=dvars_orig[exclude_vols:]
-        maskedmean=maskedmean[exclude_vols:]
-        maskedmedian=maskedmedian[exclude_vols:]
-        #V=V[:,exclude_vols:]
-        print("Mask volume %s contains %d masked voxels" % (maskfile,np.sum(M)))
-
+    if tsfile is None:
+        Vimg=None
+        print("No 4D input time series provided. Using motion only.")
     else:
-        V=Vimg.get_fdata(dtype=np.float32,caching='unchanged')[:,:,:,exclude_vols:]
-        M=np.reshape(V,[-1,V.shape[-1]])
-        M=M>(np.nanmean(M,axis=0)/8.)
-        M=np.reshape(np.all(M,axis=1),Vimg.shape[:3])
-        V=V[M>0]
-        maskedmean=np.mean(V,axis=0)
-        maskedmedian=np.median(V,axis=0)
-        dvars_orig=np.mean(np.diff(V,axis=1)**2,axis=0) #/np.mean(V)
-        dvars_orig=np.sqrt(dvars_orig)
-        print("Computed mask contains %d voxels" % (np.sum(M)))
+        Vimg=nib.load(tsfile)
+        print("Input volume %s is (%d,%d,%d,%d)" % (tsfile,Vimg.shape[0],Vimg.shape[1],Vimg.shape[2],Vimg.shape[3]))
 
-    #read in motion parameters (HCP saved mmx,mmy,mmz, degx,degy,degz)
-    mp, mp_names = read_motion_params(movfile, movfile_type)
+    if infile_params:
+        print("Loading outlier-related timeseries from previous output %s (Overriding other timeseries or motion files)" % (infile_params))
+        if infile_params.lower().endswith(".mat"):
+            from scipy.io import loadmat
+            mpdict=loadmat(infile_params,simplify_cells=True)
+            mpdict['dvars']=mpdict['dvars'][:,None]
+            mpdict['fd_power']=mpdict['fd_power'][:,None]
+        else:
+            mpdict_options={}
+            with open(infile_params,'r') as f:
+                for line in f:
+                    if line.strip().startswith('# '):
+                        mpline=line.strip()[2:].split(":",1)
+                        mpdict_options[mpline[0]]=mpline[1]
+                    else:
+                        break
+            Mdata=np.loadtxt(infile_params,comments='# ')
+            mpdict={'input_options':mpdict_options}
+            mpdict['g']=Mdata[:,:4]
+            mpdict['mv_data']= Mdata[:,4:-2]
+            mpdict['dvars']=Mdata[:,-2,None]
+            mpdict['fd_power']=Mdata[:,-1,None]
+        
+        g=mpdict['g']
+        mv_data=mpdict['mv_data']
+        dvars=mpdict['dvars']
+        fd_power=mpdict['fd_power']
+        
+        tsfile=mpdict['input_options']['inputvol']
+        movfile=mpdict['input_options']['mpfile']
+        movfile_type=mpdict['input_options']['mptype']
+        maskfile=mpdict['input_options']['maskvol']
+        exclude_vols=mpdict['input_options']['excludevols']
+        
+        if tsfile in ['','None']:
+            tsfile=None
+        if movfile in ['','None']:
+            movfile=None
+        if movfile_type in ['','None']:
+            movfile_type=None
+        if maskfile in ['','None']:
+            maskfile=None
+        if exclude_vols in ['','None']:
+            exclude_vols=0
+        
+        if exclude_vols is not None:
+            exclude_vols=int(exclude_vols)
+        
+        args.inputvol=tsfile
+        args.mpfile=movfile
+        args.mptype=movfile_type
+        args.maskvol=maskfile
+        args.excludevols=exclude_vols
+    else:
+        movfile_type=movfile_type.lower()
+        #V=Vimg.get_fdata(dtype=np.float32,caching='unchanged')[:,:,:,exclude_vols:]
+
+        #read in motion parameters (HCP saved mmx,mmy,mmz, degx,degy,degz)
+        mp, mp_names = read_motion_params(movfile, movfile_type)
+        mp=mp[exclude_vols:,:]
     
-    mp=mp[exclude_vols:,:]
+        if Vimg is None:
+            maskedmean=np.zeros(mp.shape[0])
+            maskedmedian=np.zeros(mp.shape[0])
+            dvars_orig=np.zeros(mp.shape[0]-1)
+        else:
+            if maskfile:
+                Maskimg=nib.load(maskfile)
+                M=Maskimg.get_fdata()>0
+                #keep only the masked voxels
+                #V=V[M>0]
+                blocksize=200
+                maskedmean=np.zeros(Vimg.shape[3],dtype=np.float32)
+                maskedmedian=np.zeros(Vimg.shape[3],dtype=np.float32) #need this so we can approximate np.median(V[M]) later
+                dvars_orig=np.zeros(Vimg.shape[3],dtype=np.float32)
     
-    #############################
-    # calculate global signal
+                #V=np.zeros((np.sum(M),Vimg.shape[3]),dtype=np.float32)
+    
+                Vblock=np.zeros((np.sum(M),blocksize),dtype=np.float32)
+                for i in range(0,Vimg.shape[3],blocksize):
+                    blockstop=min(i+blocksize,Vimg.shape[3])
+                    #V[:,i:blockstop]=Vimg.slicer[...,i:blockstop].get_fdata(dtype=np.float32,caching="unchanged")[M]
+                    vprev=Vblock[:,-1][:,None] #rotate last timepoint of previous block to front of this block
+                    Vblock=Vimg.slicer[...,i:blockstop].get_fdata(dtype=np.float32,caching="unchanged")[M]
+                    maskedmean[i:blockstop]=np.mean(Vblock,axis=0)
+                    maskedmedian[i:blockstop]=np.median(Vblock,axis=0)
+                    dvars_orig[i:blockstop]=np.mean(np.diff(np.hstack([vprev,Vblock]),axis=1)**2,axis=0)
+                dvars_orig=dvars_orig[1:]
+                dvars_orig=np.sqrt(dvars_orig)
+    
+                dvars_orig=dvars_orig[exclude_vols:]
+                maskedmean=maskedmean[exclude_vols:]
+                maskedmedian=maskedmedian[exclude_vols:]
+                #V=V[:,exclude_vols:]
+                print("Mask volume %s contains %d masked voxels" % (maskfile,np.sum(M)))
+
+            else:
+                V=Vimg.get_fdata(dtype=np.float32,caching='unchanged')[:,:,:,exclude_vols:]
+                M=np.reshape(V,[-1,V.shape[-1]])
+                M=M>(np.nanmean(M,axis=0)/8.)
+                M=np.reshape(np.all(M,axis=1),Vimg.shape[:3])
+                V=V[M>0]
+                maskedmean=np.mean(V,axis=0)
+                maskedmedian=np.median(V,axis=0)
+                dvars_orig=np.mean(np.diff(V,axis=1)**2,axis=0) #/np.mean(V)
+                dvars_orig=np.sqrt(dvars_orig)
+                print("Computed mask contains %d voxels" % (np.sum(M)))
+    
+    
+        #############################
+        # calculate global signal
 
 
-    #g=np.atleast_2d(np.mean(V,axis=0)).T
-    g=np.atleast_2d(maskedmean).T
-    gsigma=.7413*np.diff(np.percentile(g,[25,75]))
-    gsigma[gsigma==0]=1
-    gmean=np.median(g)
-    gnorm=(g-gmean)/gsigma;
-    dg=np.vstack([[0], np.diff(g,axis=0)])
-    dgsigma=.7413*np.diff(np.percentile(dg,[25,75]))
-    dgsigma[dgsigma==0]=1
-    dgmean=np.median(dg)
-    dgnorm=(dg-dgmean)/dgsigma
-    g=np.hstack([g,gnorm,dg,dgnorm])
+        #g=np.atleast_2d(np.mean(V,axis=0)).T
+        g=np.atleast_2d(maskedmean).T
+        gsigma=.7413*np.diff(np.percentile(g,[25,75]))
+        gsigma[gsigma==0]=1
+        gmean=np.median(g)
+        gnorm=(g-gmean)/gsigma;
+        dg=np.vstack([[0], np.diff(g,axis=0)])
+        dgsigma=.7413*np.diff(np.percentile(dg,[25,75]))
+        dgsigma[dgsigma==0]=1
+        dgmean=np.median(dg)
+        dgnorm=(dg-dgmean)/dgsigma
+        g=np.hstack([g,gnorm,dg,dgnorm])
 
 
-    ##############################
-    # dvars
+        ##############################
+        # dvars
 
-    #dvars=1000*dvars_orig/np.median(V)
-    #dvars=1000*dvars_orig/np.median(maskedmean) #how similar is this?
-    dvars=1000*dvars_orig/np.median(maskedmedian) #this is very cloes to np.median(V)
+        #dvars=1000*dvars_orig/np.median(V)
+        #dvars=1000*dvars_orig/np.median(maskedmean) #how similar is this?
+        if np.all(maskedmedian==0):
+            dvars=dvars_orig
+        else:
+            dvars=1000*dvars_orig/np.median(maskedmedian) #this is very cloes to np.median(V)
 
-    dvars_iqr=np.percentile(dvars,[25,75])
-    dvars_threshv=dvars_iqr[1]+1.5*(dvars_iqr[1]-dvars_iqr[0])
 
-    #prepend a minimal value (could be 0 but makes plot look ugly)
-    #to make it the right size and ensure it won't exceed threshold
-    preval=np.min(dvars)
-    #preval=0
-    dvars=np.hstack([preval,dvars])[:,None]
+        #prepend a minimal value (could be 0 but makes plot look ugly)
+        #to make it the right size and ensure it won't exceed threshold
+        preval=np.min(dvars)
+        #preval=0
+        dvars=np.hstack([preval,dvars])[:,None]
 
-    ###############################
-    # FD (Power 2011)
-    mpdiff=np.diff(mp,axis=0)
-    mpdiff[:,3:]=mpdiff[:,3:]*50 #multiply radians by 50 to approximate mm displacement around a sphere with radius 50mm
-    fd_power=np.sum(np.abs(mpdiff),axis=1)
-    fd_power=np.hstack([0,fd_power])[:,None]
+        ###############################
+        # FD (Power 2011)
+        mpdiff=np.diff(mp,axis=0)
+        mpdiff[:,3:]=mpdiff[:,3:]*50 #multiply radians by 50 to approximate mm displacement around a sphere with radius 50mm
+        fd_power=np.sum(np.abs(mpdiff),axis=1)
+        fd_power=np.hstack([0,fd_power])[:,None]
 
-    fd_iqr=np.percentile(fd_power,[25,75])
-    fd_threshv=fd_iqr[1]+1.5*(fd_iqr[1]-fd_iqr[0])
-    fd_outliers=fd_power>fd_threshv
+        ###############################
+        # calculate motion-related parameters
+        respos=np.diag([70,70,75]).astype(np.float64)
+        resneg=np.diag([-70,-110,-45]).astype(np.float64)
 
-    ###############################
-    # calculate motion-related parameters
-    respos=np.diag([70,70,75]).astype(np.float64)
-    resneg=np.diag([-70,-110,-45]).astype(np.float64)
+        z34=np.zeros([3,4])
+        z31=np.zeros([3,1])
+        e3=np.eye(3)
+        res=np.vstack([np.hstack([respos,z31,z34,z34,e3,z31]), #; % 6 control points: [+x,+y,+z,-x,-y,-z];
+            np.hstack([z34,respos,z31,z34,e3,z31]),
+            np.hstack([z34,z34,respos,z31,e3,z31]),
+            np.hstack([resneg,z31,z34,z34,e3,z31]),
+            np.hstack([z34,resneg,z31,z34,e3,z31]),
+            np.hstack([z34,z34,resneg,z31,e3,z31])])
 
-    z34=np.zeros([3,4])
-    z31=np.zeros([3,1])
-    e3=np.eye(3)
-    res=np.vstack([np.hstack([respos,z31,z34,z34,e3,z31]), #; % 6 control points: [+x,+y,+z,-x,-y,-z];
-        np.hstack([z34,respos,z31,z34,e3,z31]),
-        np.hstack([z34,z34,respos,z31,e3,z31]),
-        np.hstack([resneg,z31,z34,z34,e3,z31]),
-        np.hstack([z34,resneg,z31,z34,e3,z31]),
-        np.hstack([z34,z34,resneg,z31,e3,z31])])
+        mv_data=mp.copy()
+        mv_data=np.hstack([mv_data,np.zeros([mv_data.shape[0],51-mv_data.shape[1]])]);
+        for i in range(mp.shape[0]):
+            Pflat=params2matrix(mp[i,:]).T.flatten()
+            mv_data[i,13:31]=Pflat@(res.T)
 
-    mv_data=mp.copy()
-    mv_data=np.hstack([mv_data,np.zeros([mv_data.shape[0],51-mv_data.shape[1]])]);
-    for i in range(mp.shape[0]):
-        Pflat=params2matrix(mp[i,:]).T.flatten()
-        mv_data[i,13:31]=Pflat@(res.T)
+        #resposneg=np.hstack([np.vstack([respos,resneg]),np.ones((6,1))]).T
+        #for i in range(mp.shape[0]):
+        #    Pmat=params2matrix(mp[i,:])
+        #    mv_data[i,13:31]=(Pmat*resposneg)[:-1,:].T.flatten()
 
-    #resposneg=np.hstack([np.vstack([respos,resneg]),np.ones((6,1))]).T
-    #for i in range(mp.shape[0]):
-    #    Pmat=params2matrix(mp[i,:])
-    #    mv_data[i,13:31]=(Pmat*resposneg)[:-1,:].T.flatten()
-
-    mv_data[:,6]=np.sqrt(np.sum(np.abs(mv_data[:,:3]**2),axis=1))
-    mv_data[1:,7:13]=np.diff(mv_data[:,:6],axis=0)
-    mv_data[:,31]=np.sqrt(np.mean(np.abs(mv_data[:,13:31]-np.mean(mv_data[:,13:31],axis=0))**2,axis=1))
-    mv_data[1:,32:50]=np.diff(mv_data[:,13:31],axis=0)
-    mv_data[1:,50]=np.max(np.sqrt(np.sum(np.reshape(np.abs(mv_data[1:,32:50])**2,[-1,6,3]),axis=2)),axis=1)
+        mv_data[:,6]=np.sqrt(np.sum(np.abs(mv_data[:,:3]**2),axis=1))
+        mv_data[1:,7:13]=np.diff(mv_data[:,:6],axis=0)
+        mv_data[:,31]=np.sqrt(np.mean(np.abs(mv_data[:,13:31]-np.mean(mv_data[:,13:31],axis=0))**2,axis=1))
+        mv_data[1:,32:50]=np.diff(mv_data[:,13:31],axis=0)
+        mv_data[1:,50]=np.max(np.sqrt(np.sum(np.reshape(np.abs(mv_data[1:,32:50])**2,[-1,6,3]),axis=2)),axis=1)
 
 
 
-    ######################################
+        ######################################
 
 
-    #pad outlier param timecourses with zeros for all excluded vols
-    g=prepadZero(g,exclude_vols)
-    mv_data=prepadZero(mv_data,exclude_vols)
-    dvars=prepadZero(dvars,exclude_vols)
-    fd_power=prepadZero(fd_power,exclude_vols)
+        #pad outlier param timecourses with zeros for all excluded vols
+        g=prepadZero(g,exclude_vols)
+        mv_data=prepadZero(mv_data,exclude_vols)
+        dvars=prepadZero(dvars,exclude_vols)
+        fd_power=prepadZero(fd_power,exclude_vols)
 
     ######################################
     # identity outliers
+
+
+    dvars_iqr=np.percentile(dvars,[25,75])
+    dvars_threshv=dvars_iqr[1]+1.5*(dvars_iqr[1]-dvars_iqr[0])
+    
+    fd_iqr=np.percentile(fd_power,[25,75])
+    fd_threshv=fd_iqr[1]+1.5*(fd_iqr[1]-fd_iqr[0])
+    fd_outliers=fd_power>fd_threshv
 
     if do_diff_globalmean:
         gidx=3 #normalized(diff(globalmean))
@@ -270,37 +343,41 @@ def fmri_outlier_detection(argv):
     rot_outliers_x=rot_outliers[:,0]
     rot_outliers_y=rot_outliers[:,1]
     rot_outliers_z=rot_outliers[:,2]
-
+    
     dvars_outliers=dvars>dvars_threshv
     fd_outliers=fd_power>fd_threshv
-
+    
     print("%d global signal outliers: " % (len(np.nonzero(zoutliers)[0])),end='',flush=True)
-    print([x for x in np.nonzero(zoutliers)[0]])
+    print([x.item() for x in np.nonzero(zoutliers)[0]])
 
     outlier_mask=zoutliers #from global signal
     if do_composite_motion:
         print("%d combined-motion outliers: " % (len(np.nonzero(mvmt_outliers_norm)[0])),end='',flush=True)
-        print([x for x in np.nonzero(mvmt_outliers_norm)[0]])
+        print([x.item() for x in np.nonzero(mvmt_outliers_norm)[0]])
     
         outlier_mask = outlier_mask | mvmt_outliers_norm
     
     else:
         mvmt_outliers_all=mvmt_outliers_x | mvmt_outliers_y | mvmt_outliers_z | rot_outliers_x | rot_outliers_y | rot_outliers_z
         print("%d separate motion outliers: " % (len(np.nonzero(mvmt_outliers_all)[0])),end='',flush=True)
-        print([x for x in np.nonzero(mvmt_outliers_all)[0]])
+        print([x.item() for x in np.nonzero(mvmt_outliers_all)[0]])
     
         outlier_mask = outlier_mask | mvmt_outliers_all
 
     print("%d starting volumes considered outliers: " % (exclude_vols),end='',flush=True)
-    print([x for x in np.arange(exclude_vols)])
+    print([x.item() for x in np.arange(exclude_vols)])
 
     outlier_mask[:exclude_vols]=True
 
     print("%d total unique outliers: " % (len(np.nonzero(outlier_mask)[0])),end='',flush=True)
-    print([x for x in np.nonzero(outlier_mask)[0]])
+    print([x.item() for x in np.nonzero(outlier_mask)[0]])
 
-    print("Saving binarized outlier mask (1=outlier) to %s" % (outfile))
-    np.savetxt(outfile,outlier_mask,"%d")
+    print("Mean FD: %g" % (np.mean(fd_power)))
+    print("Mean DVARS: %g" % (np.mean(dvars)))
+    
+    if outfile:
+        print("Saving binarized outlier mask (1=outlier) to %s" % (outfile))
+        np.savetxt(outfile,outlier_mask,"%d")
 
     if outfile_params:
         print("Saving time series used for estimating outliers to %s" % (outfile_params))
