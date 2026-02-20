@@ -5,7 +5,7 @@ import sys
 import argparse
 import warnings
 from scipy.io import loadmat,savemat
-import scipy.interpolate
+
 try:
     from scipy.signal import gaussian as scipy_gaussian
 except ImportError:
@@ -33,6 +33,7 @@ def argument_parse(argv):
     parser.add_argument('--connmeasure',action='append',dest='connmeasure',choices=['none','correlation','partialcorrelation','precision','covariance'],nargs='*')
     parser.add_argument('--outputformat',action='store',dest='outputformat',choices=['mat','txt'],default='mat')
     parser.add_argument('--outputvolumeformat',action='store',dest='outputvolumeformat',choices=['same','auto','nii','nii.gz'],default='same')
+    parser.add_argument('--interpoutliers','--interp',action='store_true',dest='interp_outliers',help='Interpolate outlier time points after denoising (otherwise filtering will replace with smoothed values)')
     parser.add_argument('--gsr',action='store_true',dest='gsr')
     parser.add_argument('--nocompcor',action='store_true',dest='nocompcor')
     parser.add_argument('--nomotion',action='store_true',dest='nomotion')
@@ -111,6 +112,7 @@ def fmri_clean_parcellated_timeseries(argv):
     do_seqroi=args.sequentialroi
     sequential_roi_error_size=args.sequentialroierrorsize
     do_concat=args.concat
+    do_interp_outliers=args.interp_outliers
     input_shrinkage=args.shrinkage
     hrffile=args.hrffile
     
@@ -220,6 +222,7 @@ def fmri_clean_parcellated_timeseries(argv):
     print("Motion parameter file (%s-style): %s" % (movfile_type,movfile_list))
     print("Outlier timepoint file: %s" % (outlierfile_list))
     print("Ignore first N volumes: %s" % (skipvols))
+    print("Interpolate outliers: %s" % (do_interp_outliers))
     print("Filter strategy: %s" % (bpfmode))
     print("Filter band-pass Hz: [%s,%s]" % (bpf[0],bpf[1]))
     print("Output basename: %s" % (outbase_list))
@@ -445,7 +448,10 @@ def fmri_clean_parcellated_timeseries(argv):
                 Dt_clean=dctfilt(Dt_clean, tr, bpf,filter_edge_rolloff,outliermat=outlierflat) #, scipy.signal.gaussian(21,5))
                 #Dt_clean=fftfilt(naninterp(Dt_clean,outliermat=outlierflat), tr, bpf, scipy.signal.gaussian(21,5))
                 #Dt_clean=fftfilt(Dt_clean, tr, bpf)
-            
+
+            if do_interp_outliers:
+                Dt_clean = naninterp(Dt_clean,outliermat=outlierflat)
+
             if do_seqroi:
                 #make full 
                 maxroi=np.max(roivals).astype(int)
