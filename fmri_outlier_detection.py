@@ -3,7 +3,7 @@ import numpy as np
 import sys
 import argparse
 from pathlib import Path 
-from utils import prepadZero, params2matrix, read_motion_params, package_version_dict
+from utils import prepadZero, params2matrix, read_motion_params, read_fmriclean_outlier_params, package_version_dict
 
 def argument_parse(argv):
     parser=argparse.ArgumentParser(description='ART-style outlier detection on motion-corrected fMRI time series and motion parameter estimates')
@@ -96,26 +96,7 @@ def fmri_outlier_detection(argv):
 
     if infile_params:
         print("Loading outlier-related timeseries from previous output %s (Overriding other timeseries or motion files)" % (infile_params))
-        if infile_params.lower().endswith(".mat"):
-            from scipy.io import loadmat
-            mpdict=loadmat(infile_params,simplify_cells=True)
-            mpdict['dvars']=mpdict['dvars'][:,None]
-            mpdict['fd_power']=mpdict['fd_power'][:,None]
-        else:
-            mpdict_options={}
-            with open(infile_params,'r') as f:
-                for line in f:
-                    if line.strip().startswith('# '):
-                        mpline=line.strip()[2:].split(":",1)
-                        mpdict_options[mpline[0]]=mpline[1]
-                    else:
-                        break
-            Mdata=np.loadtxt(infile_params,comments='# ')
-            mpdict={'input_options':mpdict_options}
-            mpdict['g']=Mdata[:,:4]
-            mpdict['mv_data']= Mdata[:,4:-2]
-            mpdict['dvars']=Mdata[:,-2,None]
-            mpdict['fd_power']=Mdata[:,-1,None]
+        mpdict=read_fmriclean_outlier_params(infile_params)
         
         g=mpdict['g']
         mv_data=mpdict['mv_data']
@@ -127,20 +108,6 @@ def fmri_outlier_detection(argv):
         movfile_type=mpdict['input_options']['mptype']
         maskfile=mpdict['input_options']['maskvol']
         exclude_vols=mpdict['input_options']['excludevols']
-        
-        if tsfile in ['','None']:
-            tsfile=None
-        if movfile in ['','None']:
-            movfile=None
-        if movfile_type in ['','None']:
-            movfile_type=None
-        if maskfile in ['','None']:
-            maskfile=None
-        if exclude_vols in ['','None']:
-            exclude_vols=0
-        
-        if exclude_vols is not None:
-            exclude_vols=int(exclude_vols)
         
         args.inputvol=tsfile
         args.mpfile=movfile

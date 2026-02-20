@@ -409,6 +409,42 @@ def params2matrix(P):
 
     return T * R
 
+def read_fmriclean_outlier_params(paramfile):
+    if paramfile.lower().endswith(".mat"):
+        mpdict=loadmat(paramfile,simplify_cells=True)
+        mpdict['dvars']=mpdict['dvars'][:,None]
+        mpdict['fd_power']=mpdict['fd_power'][:,None]
+    else:
+        mpdict_options={}
+        with open(paramfile,'r') as f:
+            for line in f:
+                if line.strip().startswith('# '):
+                    mpline=line.strip()[2:].split(":",1)
+                    mpdict_options[mpline[0]]=mpline[1]
+                else:
+                    break
+        Mdata=np.loadtxt(paramfile,comments='# ')
+        mpdict={'input_options':mpdict_options}
+        mpdict['g']=Mdata[:,:4]
+        mpdict['mv_data']= Mdata[:,4:-2]
+        mpdict['dvars']=Mdata[:,-2,None]
+        mpdict['fd_power']=Mdata[:,-1,None]
+    
+    if mpdict['input_options']['inputvol'] in ['','None']:
+        mpdict['input_options']['inputvol']=None
+    if mpdict['input_options']['mpfile'] in ['','None']:
+        mpdict['input_options']['mpfile']=None
+    if mpdict['input_options']['mptype'] in ['','None']:
+        mpdict['input_options']['mptype']=None
+    if mpdict['input_options']['maskvol'] in ['','None']:
+        mpdict['input_options']['maskvol']=None
+    if mpdict['input_options']['excludevols'] in ['','None']:
+        mpdict['input_options']['excludevols']=0
+    
+    if mpdict['input_options']['excludevols'] is not None:
+        mpdict['input_options']['excludevols']=int(mpdict['input_options']['excludevols'])
+    return mpdict
+
 def read_motion_params(movfile, movfile_type):
     #read in motion parameters (HCP saved mmx,mmy,mmz, degx,degy,degz)
     if not movfile:
@@ -451,6 +487,11 @@ def read_motion_params(movfile, movfile_type):
             mp_dataframe['rot_y'],
             mp_dataframe['rot_z']
             ],axis=-1)
+    
+    elif movfile_type=="fmriclean":
+        mpdict=read_fmriclean_outlier_params(movfile)
+        mp=mpdict['mv_data'][:,:6]
+        print("Motion file %s is (%d,%d), fMRIClean-style=(xmm,ymm,zmm,radx,rady,radz)" % (movfile,mp.shape[0],mp.shape[1]))
     else:
         raise Exception("Unknown motion parameter file type: %s" % (movfile_type))
     

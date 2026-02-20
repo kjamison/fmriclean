@@ -6,7 +6,6 @@ import sys
 import argparse
 from scipy.ndimage import binary_erosion
 from scipy.io import savemat
-import scipy.interpolate
 import pandas as pd
 
 import os.path
@@ -22,7 +21,7 @@ def argument_parse(argv):
     #parser.add_argument('--mask',action='store',dest='maskfile')
     parser.add_argument('--output',action='store',dest='outputfile')
     parser.add_argument('--motionparam',action='store',dest='mpfile')
-    parser.add_argument('--motionparamtype',action='store',dest='mptype',choices=['spm','hcp','fsl','fmriprep'],default='fsl')
+    parser.add_argument('--motionparamtype',action='store',dest='mptype',choices=['spm','hcp','fsl','fmriprep','ants','fmriclean'],default='fsl')
     parser.add_argument('--gmmask',action='store',dest='gmfile',help='gray-matter mask (for global signal regression)')
     parser.add_argument('--wmmask',action='store',dest='wmfile',help='white-matter mask')
     parser.add_argument('--csfmask',action='store',dest='csffile',help='CSF mask')
