@@ -78,6 +78,8 @@ def naninterp(x,outliermat=None):
     #linearly interpolate segments of data with nans (to allow fftfilt)
     notnan=~np.any(np.isnan(x),axis=1)
     if outliermat is not None:
+        if outliermat.ndim ==1:
+            outliermat=outliermat[:,None]
         notnan[np.sum(np.abs(outliermat),axis=1)>0]=False
     notnanidx=np.where(notnan)[0]
     return scipy.interpolate.interp1d(notnanidx,x[notnanidx,:],axis=0,bounds_error=False,fill_value=0)(np.arange(x.shape[0]))
@@ -200,12 +202,12 @@ def load_input(filename, mask=None):
     roisizes=None
     extension=None
     if filename.lower().endswith(".mat"):
-        M=loadmat(filename)
+        M=loadmat(filename,simplify_cells=True)
         Dt=M['ts']
         if 'repetition_time' in M:
-            tr=M['repetition_time'][0]
-        roivals=M['roi_labels'][0]
-        roisizes=M['roi_sizes'][0]
+            tr=M['repetition_time']
+        roivals=M['roi_labels']
+        roisizes=M['roi_sizes']
         extension="mat"
     elif filename.lower().endswith(".nii.gz") or filename.lower().endswith(".nii"):
         
