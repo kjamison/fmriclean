@@ -3,6 +3,7 @@ import nilearn
 import nilearn.connectome
 import sys
 import argparse
+import warnings
 from scipy.io import loadmat,savemat
 import scipy.interpolate
 try:
@@ -415,12 +416,16 @@ def fmri_clean_parcellated_timeseries(argv):
             
             try:
                 #for nilearn >= 0.7.1 (3/2021), need to use standardize_confounds=False to avoid constant regressor terms being zerod out
-                Dt_clean=nilearn.signal.clean(Dt, confounds=confounds, standardize=False, standardize_confounds=False, t_r=tr, detrend=False,low_pass=cleanarg_lp, high_pass=cleanarg_hp)
+                with warnings.catch_warnings():
+                    warnings.filterwarnings("ignore", category=UserWarning, message=".*When confounds are provided.*")
+                    Dt_clean=nilearn.signal.clean(Dt, confounds=confounds, standardize=False, standardize_confounds=False, t_r=tr, detrend=False,low_pass=cleanarg_lp, high_pass=cleanarg_hp)
             except TypeError as e:
                 print("* TypeError in nilearn.signal.clean. Might be nilearn version <0.7.1, so trying again without standardize_confounds argument:\n* ",e)
                 #if this fails, it might be nilearn <= 0.7.0, which doesn't have standardize_confounds (uses same as "standardize")
                 # so try again without that argument
-                Dt_clean=nilearn.signal.clean(Dt, confounds=confounds, standardize=False, t_r=tr, detrend=False,low_pass=cleanarg_lp, high_pass=cleanarg_hp)
+                with warnings.catch_warnings():
+                    warnings.filterwarnings("ignore", category=UserWarning, message=".*When confounds are provided.*")
+                    Dt_clean=nilearn.signal.clean(Dt, confounds=confounds, standardize=False, t_r=tr, detrend=False,low_pass=cleanarg_lp, high_pass=cleanarg_hp)
             
             if bpfmode=="connregbp":
                 #Dt=nilearn.signal.clean(Dt.copy(), detrend=False, standardize=False, standardize_confounds=False, low_pass=bpf[1], high_pass=bpf[0], t_r=tr)
