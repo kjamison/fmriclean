@@ -12,6 +12,12 @@ import os.path
 import re
 from utils import *
 
+try:
+    from scipy.signal import gaussian as scipy_gaussian
+except ImportError:
+    #new scipy moved gaussian to .windows
+    from scipy.signal.windows import gaussian as scipy_gaussian
+
 def argument_parse(argv):
     parser=argparse.ArgumentParser(description='ALFF and fALFF *after* denoising')
 
@@ -122,7 +128,7 @@ def fmri_alff(argv):
         if do_filter_rolloff:
             filter_edge_rolloff_size=int(36/tr/2)*2+1 #51 for tr=0.72
             filter_edge_rolloff_std=3.6/tr #5 for tr=0.72
-            filter_edge_rolloff=scipy.signal.gaussian(filter_edge_rolloff_size,filter_edge_rolloff_std)
+            filter_edge_rolloff=scipy_gaussian(filter_edge_rolloff_size,filter_edge_rolloff_std)
         else:
             filter_edge_rolloff=None
         
